@@ -16,4 +16,5 @@ RUN python manage.py collectstatic --no-input
 EXPOSE 8000
 
 # Start with Daphne (ASGI — supports HTTP + WebSockets)
-CMD daphne -b 0.0.0.0 -p ${PORT:-8000} config.asgi:application
+# Use shell form so $PORT gets expanded
+CMD ["/bin/sh", "-c", "python manage.py migrate && daphne -b 0.0.0.0 -p $PORT config.asgi:application"]
