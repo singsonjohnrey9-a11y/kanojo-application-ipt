@@ -3,6 +3,12 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../api/config';
 import { Heart, MapPin, Sparkles } from 'lucide-react';
 
+// Fix mixed content: ensure image URLs use https in production
+const fixImageUrl = (url) => {
+    if (!url) return null;
+    return url.replace(/^http:\/\//, 'https://');
+};
+
 const RANK_COLORS = {
     BRONZE: 'bronze',
     SILVER: 'silver',
@@ -145,7 +151,7 @@ export const ProfileList = () => {
                                     }}>
                                         {profile.image ? (
                                             <img
-                                                src={profile.image}
+                                                src={fixImageUrl(profile.image)}
                                                 alt={displayName}
                                                 style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.3s ease' }}
                                                 onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
