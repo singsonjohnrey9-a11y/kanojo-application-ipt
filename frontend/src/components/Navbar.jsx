@@ -1,43 +1,118 @@
-import React, { useContext } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useContext, useState, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { Gift, Heart, MessageCircle, Sparkles } from 'lucide-react';
+import { Gift, Heart, MessageCircle, X, LogOut } from 'lucide-react';
 
 export const Navbar = () => {
     const { user, logoutUser } = useContext(AuthContext);
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    const [scrolled, setScrolled] = useState(false);
+    const location = useLocation();
+
+    useEffect(() => {
+        const onScroll = () => setScrolled(window.scrollY > 10);
+        window.addEventListener('scroll', onScroll);
+        return () => window.removeEventListener('scroll', onScroll);
+    }, []);
+
+    // Close drawer on route change
+    useEffect(() => { setDrawerOpen(false); }, [location]);
+
+    const isActive = (path) => location.pathname === path;
+
+    const navLinks = [
+        { to: '/profiles', label: 'Cast List', icon: <Heart size={15} /> },
+        { to: '/chat', label: 'Chat', icon: <MessageCircle size={15} /> },
+    ];
 
     return (
-        <nav className="glass-panel" style={{ padding: '0.75rem 0' }}>
-            <div className="container flex-between">
-                <Link to="/" style={{
-                    fontSize: '1.5rem',
-                    fontWeight: '800',
-                    color: 'var(--accent-primary)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem'
-                }}>
-                    <Gift color="var(--accent-primary)" size={24} /> RentCebu
-                </Link>
-                <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
-                    <Link to="/profiles" style={{ fontSize: '0.95rem', fontWeight: '700', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>Cast List <Heart size={16} /></Link>
-                    <Link to="/chat" style={{ fontSize: '0.95rem', fontWeight: '700', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>Secret Chat <MessageCircle size={16} /></Link>
+        <>
+            <nav className={`glass-panel${scrolled ? ' scrolled' : ''}`} style={{ padding: '0.625rem 0' }}>
+                <div className="container flex-between">
+                    {/* Logo */}
+                    <Link to="/" style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <Gift size={22} /> RentCebu
+                    </Link>
 
-                    <div style={{ width: '2px', height: '24px', backgroundColor: 'var(--border-color)' }}></div>
+                    {/* Desktop Nav */}
+                    <div className="nav-links" style={{ display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
+                        {navLinks.map(link => (
+                            <Link key={link.to} to={link.to} style={{
+                                fontSize: '0.875rem', fontWeight: '600',
+                                color: isActive(link.to) ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                                display: 'flex', alignItems: 'center', gap: '0.3rem',
+                                borderBottom: isActive(link.to) ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                                paddingBottom: '2px',
+                                transition: 'all 150ms ease',
+                            }}>
+                                {link.icon} {link.label}
+                            </Link>
+                        ))}
 
+                        <div style={{ width: '1px', height: '20px', backgroundColor: 'var(--border-color)' }} />
+
+                        {user ? (
+                            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                                <div style={{
+                                    width: '30px', height: '30px', borderRadius: '50%',
+                                    background: 'linear-gradient(135deg, var(--accent-primary), #ff6b9d)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    color: 'white', fontSize: '0.7rem', fontWeight: '700',
+                                }}>
+                                    {(user.username || 'U')[0].toUpperCase()}
+                                </div>
+                                <button className="btn btn-ghost btn-sm" onClick={logoutUser} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                    <LogOut size={14} /> Logout
+                                </button>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <Link to="/login" className="btn btn-ghost btn-sm">Login</Link>
+                                <Link to="/register" className="btn btn-primary btn-sm">Sign Up</Link>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Hamburger */}
+                    <div className="hamburger" onClick={() => setDrawerOpen(true)}>
+                        <span /><span /><span />
+                    </div>
+                </div>
+            </nav>
+
+            {/* Mobile Drawer Overlay */}
+            <div className={`mobile-overlay${drawerOpen ? ' open' : ''}`} onClick={() => setDrawerOpen(false)} />
+
+            {/* Mobile Drawer */}
+            <div className={`mobile-drawer${drawerOpen ? ' open' : ''}`}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                    <span style={{ fontWeight: '800', color: 'var(--accent-primary)', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <Gift size={20} /> RentCebu
+                    </span>
+                    <button onClick={() => setDrawerOpen(false)} style={{ color: 'var(--text-muted)' }}>
+                        <X size={22} />
+                    </button>
+                </div>
+
+                {navLinks.map(link => (
+                    <Link key={link.to} to={link.to}>
+                        {link.icon} {link.label}
+                    </Link>
+                ))}
+
+                <div style={{ marginTop: 'auto', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
                     {user ? (
-                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                            <span style={{ fontWeight: '600', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>Hi, {user.username || 'User'} <Sparkles size={16} color="var(--accent-primary)" /></span>
-                            <button className="btn btn-secondary" onClick={logoutUser}>Logout</button>
-                        </div>
+                        <button className="btn btn-secondary" style={{ width: '100%' }} onClick={logoutUser}>
+                            <LogOut size={16} /> Logout
+                        </button>
                     ) : (
-                        <div style={{ display: 'flex', gap: '0.75rem' }}>
-                            <Link to="/login" style={{ padding: '0.5rem 1rem', fontWeight: '700', color: 'var(--accent-primary)' }}>Login</Link>
-                            <Link to="/register" className="btn btn-primary" style={{ padding: '0.5rem 1.25rem' }}>Sign Up</Link>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            <Link to="/login" className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center' }}>Login</Link>
+                            <Link to="/register" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>Sign Up</Link>
                         </div>
                     )}
                 </div>
             </div>
-        </nav>
+        </>
     );
 };

@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { Card, CardBody, CardHeader } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-import axios from 'axios';
+import api from '../api/config';
+import { ArrowLeft, Minus, Plus, CheckCircle, MapPin, Clock, Star } from 'lucide-react';
+
+const GRADIENT_COLORS = [
+    ['#fbc2eb', '#a6c1ee'],
+    ['#a1c4fd', '#c2e9fb'],
+    ['#ffecd2', '#fcb69f'],
+];
 
 export const RentRequest = () => {
     const { id } = useParams();
@@ -13,134 +17,187 @@ export const RentRequest = () => {
 
     const [profile, setProfile] = useState(null);
     const [hours, setHours] = useState(1);
-    const [totalCost, setTotalCost] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
+    const [submitted, setSubmitted] = useState(false);
     const [error, setError] = useState(null);
 
     useEffect(() => {
-        axios.get(`/api/profiles/${id}/`)
-            .then(res => {
-                setProfile(res.data);
-                setTotalCost(parseFloat(res.data.hourly_rate) * hours);
-                setLoading(false);
-            })
-            .catch(err => {
-                console.error('Failed to fetch profile:', err);
-                setError('Profile not found.');
-                setLoading(false);
-            });
+        api.get(`/api/profiles/${id}/`)
+            .then(res => { setProfile(res.data); setLoading(false); })
+            .catch(() => { setError('Profile not found.'); setLoading(false); });
     }, [id]);
 
-    useEffect(() => {
-        if (profile) {
-            setTotalCost(parseFloat(profile.hourly_rate) * hours);
-        }
-    }, [hours, profile]);
+    const rate = profile ? parseFloat(profile.hourly_rate) : 0;
+    const totalCost = rate * hours;
 
     const getDisplayName = () => {
         if (!profile) return '';
-        if (profile.user?.first_name) {
-            return `${profile.user.first_name} ${profile.user.last_name || ''}`.trim();
-        }
+        if (profile.user?.first_name) return `${profile.user.first_name} ${profile.user.last_name || ''}`.trim();
         return profile.user?.username || 'Unknown';
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    const getInitials = (name) => name.split(/[\s_]+/).map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
+    const handleSubmit = async () => {
+        setSubmitting(true);
         try {
-            await axios.post('/api/requests/', {
-                profile_id: profile.id,
-                hours: hours
-            });
-            alert(`Success! Request sent to ${getDisplayName()} for ₱${totalCost.toLocaleString()}`);
-            navigate('/profiles');
-        } catch (err) {
-            console.error('Failed to submit request:', err);
+            await api.post('/api/requests/', { profile_id: profile.id, hours });
+            setSubmitted(true);
+            setTimeout(() => navigate('/profiles'), 2500);
+        } catch {
             alert('Failed to submit request. Please try again.');
+            setSubmitting(false);
         }
     };
 
     if (loading) {
         return (
-            <div className="container" style={{ padding: '4rem 1.5rem', textAlign: 'center' }}>
-                <div style={{ fontSize: '1.25rem', color: 'var(--text-secondary)' }}>Loading profile...</div>
+            <div className="container flex-center" style={{ padding: '6rem 1.5rem' }}>
+                <div className="spinner" style={{ width: 32, height: 32, border: '3px solid var(--border-color)', borderTopColor: 'var(--accent-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
             </div>
         );
     }
 
     if (error) {
         return (
-            <div className="container" style={{ padding: '4rem 1.5rem', textAlign: 'center' }}>
-                <div style={{ fontSize: '1.25rem', color: '#ef4444' }}>{error}</div>
-                <Button variant="secondary" style={{ marginTop: '1rem' }} onClick={() => navigate('/profiles')}>
-                    Back to Profiles
-                </Button>
+            <div className="container" style={{ padding: '5rem 1.5rem', textAlign: 'center' }}>
+                <p style={{ color: 'var(--danger)', fontSize: '1.1rem', marginBottom: '1.5rem' }}>{error}</p>
+                <button className="btn btn-secondary" onClick={() => navigate('/profiles')}>Back to Cast</button>
             </div>
         );
     }
 
     if (!user) {
         return (
-            <div className="container" style={{ padding: '6rem 1.5rem', textAlign: 'center' }}>
-                <h2 style={{ fontSize: '1.75rem', marginBottom: '1rem', color: 'var(--accent-primary)' }}>Login Required</h2>
-                <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem', fontSize: '1.1rem' }}>
-                    You must be logged in to book {getDisplayName()}.
+            <div className="container" style={{ padding: '5rem 1.5rem', textAlign: 'center' }}>
+                <h2 style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>Login Required</h2>
+                <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>
+                    You need to be logged in to book {getDisplayName()}.
                 </p>
-                <Button variant="primary" onClick={() => navigate('/login')}>Login to Continue</Button>
+                <button className="btn btn-primary" onClick={() => navigate('/login')}>Login to Continue</button>
             </div>
         );
     }
 
+    // Success State
+    if (submitted) {
+        return (
+            <div className="container flex-center animate-bounce-in" style={{ padding: '6rem 1.5rem', flexDirection: 'column', gap: '1rem' }}>
+                <CheckCircle size={56} color="var(--success)" />
+                <h2 style={{ fontSize: '1.5rem' }}>Request Sent!</h2>
+                <p style={{ color: 'var(--text-muted)' }}>
+                    ₱{totalCost.toLocaleString()} • {hours} hour{hours > 1 ? 's' : ''} with {getDisplayName()}
+                </p>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Redirecting...</p>
+            </div>
+        );
+    }
+
+    const gradient = GRADIENT_COLORS[parseInt(id) % GRADIENT_COLORS.length];
+
     return (
-        <div className="container" style={{ padding: '2rem 1.5rem', maxWidth: '600px' }}>
+        <div className="container animate-fade-in-up" style={{ padding: '2rem 1.5rem', maxWidth: '560px' }}>
+            {/* Back */}
             <button
-                className="btn"
-                style={{ marginBottom: '1.5rem', padding: '0', color: 'var(--text-secondary)' }}
+                className="btn btn-ghost"
+                style={{ marginBottom: '1.5rem', padding: 0, gap: '0.3rem', fontSize: '0.85rem' }}
                 onClick={() => navigate('/profiles')}
             >
-                &larr; Back to Profiles
+                <ArrowLeft size={16} /> Back to Cast
             </button>
 
-            <Card>
-                <CardHeader>
-                    <h1 style={{ fontSize: '1.5rem' }}>Rent Request: {getDisplayName()}</h1>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                        {profile.rank} Rank • ₱{parseFloat(profile.hourly_rate).toLocaleString()}/hr
-                    </p>
-                </CardHeader>
-
-                <CardBody>
-                    <form onSubmit={handleSubmit}>
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <Input
-                                type="number"
-                                label="Duration (Hours)"
-                                value={hours}
-                                onChange={(e) => setHours(Math.max(1, parseInt(e.target.value) || 1))}
-                                min="1"
-                                max="24"
-                                required
-                            />
+            {/* Profile Header */}
+            <div className="card" style={{ marginBottom: '1.5rem', padding: 0, overflow: 'hidden' }}>
+                <div style={{
+                    height: '140px',
+                    background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]})`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                    {profile.image ? (
+                        <img src={profile.image} alt={getDisplayName()} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                        <span style={{ fontSize: '3rem', fontWeight: '800', color: 'rgba(255,255,255,0.9)' }}>
+                            {getInitials(getDisplayName())}
+                        </span>
+                    )}
+                </div>
+                <div style={{ padding: '1.25rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                        <div>
+                            <h2 style={{ fontSize: '1.25rem', marginBottom: '0.2rem' }}>{getDisplayName()}</h2>
+                            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                <MapPin size={12} /> {profile.location}
+                            </span>
                         </div>
+                        <span className="badge" style={{ backgroundColor: 'var(--accent-light)', color: 'var(--accent-primary)' }}>
+                            <Star size={10} /> {profile.rank}
+                        </span>
+                    </div>
+                    {profile.bio && (
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: '0.75rem', lineHeight: 1.6 }}>
+                            {profile.bio}
+                        </p>
+                    )}
+                </div>
+            </div>
 
-                        <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }}>
-                            <div className="flex-between" style={{ marginBottom: '0.5rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                                <span>Rate</span>
-                                <span>₱{parseFloat(profile.hourly_rate).toLocaleString()} × {hours} hr(s)</span>
-                            </div>
-                            <div style={{ borderTop: '1px solid var(--border-color)', margin: '0.5rem 0' }}></div>
-                            <div className="flex-between" style={{ fontSize: '1.125rem', fontWeight: '600' }}>
-                                <span>Total Cost</span>
-                                <span style={{ color: 'var(--accent-primary)' }}>₱{totalCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                            </div>
-                        </div>
+            {/* Hour Selector */}
+            <div className="card" style={{ marginBottom: '1.5rem' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '1rem', display: 'block' }}>
+                    <Clock size={14} style={{ verticalAlign: 'text-bottom', marginRight: '0.3rem' }} />
+                    Duration
+                </label>
 
-                        <Button type="submit" variant="primary" style={{ width: '100%' }}>
-                            Confirm Request
-                        </Button>
-                    </form>
-                </CardBody>
-            </Card>
+                <div className="hour-selector" style={{ justifyContent: 'center' }}>
+                    <button
+                        className="hour-btn"
+                        onClick={() => setHours(h => Math.max(1, h - 1))}
+                        disabled={hours <= 1}
+                    >
+                        <Minus size={18} />
+                    </button>
+                    <div className="hour-display">
+                        {hours}<span style={{ fontSize: '0.85rem', fontWeight: '500', color: 'var(--text-muted)', marginLeft: '0.25rem' }}>hr{hours > 1 ? 's' : ''}</span>
+                    </div>
+                    <button
+                        className="hour-btn"
+                        onClick={() => setHours(h => Math.min(24, h + 1))}
+                        disabled={hours >= 24}
+                    >
+                        <Plus size={18} />
+                    </button>
+                </div>
+            </div>
+
+            {/* Cost Summary */}
+            <div className="card" style={{ marginBottom: '1.5rem', backgroundColor: 'var(--bg-muted)' }}>
+                <div className="flex-between" style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                    <span>Rate</span>
+                    <span>₱{rate.toLocaleString()} × {hours}</span>
+                </div>
+                <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '0.5rem 0' }} />
+                <div className="flex-between" style={{ fontSize: '1.1rem', fontWeight: '700' }}>
+                    <span>Total</span>
+                    <span style={{ color: 'var(--accent-primary)' }}>
+                        ₱{totalCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </span>
+                </div>
+            </div>
+
+            {/* Submit */}
+            <button
+                className="btn btn-primary btn-lg"
+                style={{ width: '100%' }}
+                onClick={handleSubmit}
+                disabled={submitting}
+            >
+                {submitting ? (
+                    <><div className="spinner" /> Sending...</>
+                ) : (
+                    'Confirm Request'
+                )}
+            </button>
         </div>
     );
 };

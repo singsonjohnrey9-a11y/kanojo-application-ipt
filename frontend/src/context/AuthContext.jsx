@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api/config';
 import { useNavigate } from 'react-router-dom';
 
 export const AuthContext = createContext();
@@ -14,7 +14,7 @@ export const AuthProvider = ({ children }) => {
 
     // Axios interceptor to attach JWT token
     useEffect(() => {
-        const requestInterceptor = axios.interceptors.request.use(
+        const requestInterceptor = api.interceptors.request.use(
             (config) => {
                 if (authTokens) {
                     config.headers['Authorization'] = `Bearer ${authTokens.access}`;
@@ -24,8 +24,7 @@ export const AuthProvider = ({ children }) => {
             (error) => Promise.reject(error)
         );
 
-        // Optional: Response interceptor to handle 401s (token expiration)
-        const responseInterceptor = axios.interceptors.response.use(
+        const responseInterceptor = api.interceptors.response.use(
             (response) => response,
             (error) => {
                 if (error.response?.status === 401) {
@@ -36,21 +35,17 @@ export const AuthProvider = ({ children }) => {
         );
 
         return () => {
-            axios.interceptors.request.eject(requestInterceptor);
-            axios.interceptors.response.eject(responseInterceptor);
+            api.interceptors.request.eject(requestInterceptor);
+            api.interceptors.response.eject(responseInterceptor);
         };
     }, [authTokens]);
 
     // Decode JWT basic payload if needed or fetch user
     useEffect(() => {
         if (authTokens) {
-            // Fetch current user details
-            axios.get('/api/users/')
+            api.get('/api/users/')
                 .then(res => {
-                    // This is a naive way (fetching all users), assuming the backend filters it
-                    // The backend should realistically have a /api/users/me/ endpoint, but we can do a quick fix
-                    // For now, let's just decode the JWT manually to get user_id (optional) or assume we're logged in
-                    setUser({ id: 'active', name: 'User' }); // Placeholder until better endpoint
+                    setUser({ id: 'active', name: 'User' });
                 })
                 .catch(() => logoutUser());
         }
@@ -59,7 +54,7 @@ export const AuthProvider = ({ children }) => {
 
     const loginUser = async (username, password) => {
         try {
-            const response = await axios.post('/api/token/', {
+            const response = await api.post('/api/token/', {
                 username,
                 password
             });
@@ -79,7 +74,7 @@ export const AuthProvider = ({ children }) => {
 
     const registerUser = async (userData) => {
         try {
-            const response = await axios.post('/api/users/', userData);
+            const response = await api.post('/api/users/', userData);
             if (response.status === 201) {
                 // Auto-login after register
                 await loginUser(userData.username, userData.password);

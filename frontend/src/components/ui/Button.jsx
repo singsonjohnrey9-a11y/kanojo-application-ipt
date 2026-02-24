@@ -1,11 +1,16 @@
 import React from 'react';
 
-export const Button = ({ children, variant = 'primary', className = '', ...props }) => {
-    const baseClass = 'btn';
-    const variantClass = variant === 'primary' ? 'btn-primary' : 'btn-secondary';
+export const Button = ({ children, variant = 'primary', size, loading, className = '', disabled, ...props }) => {
+    const classes = [
+        'btn',
+        variant === 'primary' ? 'btn-primary' : variant === 'ghost' ? 'btn-ghost' : 'btn-secondary',
+        size === 'sm' ? 'btn-sm' : size === 'lg' ? 'btn-lg' : '',
+        className,
+    ].filter(Boolean).join(' ');
 
     return (
-        <button className={`${baseClass} ${variantClass} ${className}`} {...props}>
+        <button className={classes} disabled={disabled || loading} {...props}>
+            {loading && <div className="spinner" />}
             {children}
         </button>
     );

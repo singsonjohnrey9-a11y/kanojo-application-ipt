@@ -1,127 +1,226 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, CardBody, CardHeader, CardFooter } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-import { useNavigate } from 'react-router-dom';
+import { MessageCircle, Send, LogOut, Radio, Search } from 'lucide-react';
+import { getWebSocketURL } from '../api/config';
 
 export const AnonymousChat = () => {
-    const navigate = useNavigate();
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
-    const [isConnected, setIsConnected] = useState(false);
+    const [status, setStatus] = useState('idle'); // idle | searching | connected
     const [roomId, setRoomId] = useState(null);
     const ws = useRef(null);
+    const messagesEndRef = useRef(null);
     const myId = useRef(Math.random().toString(36).substring(7));
 
-    // Mock connecting to a random room
-    const connectToChat = () => {
-        // Real app: We'd get a room ID from the server queue API
-        const newRoomId = Math.random().toString(36).substring(7);
-        setRoomId(newRoomId);
+    // Auto-scroll
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
 
-        // Connect to Django Channels WebSocket
-        const wsUrl = `ws://localhost:8000/ws/chat/${newRoomId}/`;
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => { if (ws.current) ws.current.close(); };
+    }, []);
 
-        try {
-            ws.current = new WebSocket(wsUrl);
+    const startSearch = () => {
+        setStatus('searching');
+        setMessages([]);
+        setRoomId(null);
 
-            ws.current.onopen = () => {
-                setIsConnected(true);
-                setMessages([{ id: Date.now(), text: 'Connected! Waiting for an anonymous partner to join...', sender: 'system' }]);
-            };
+        const wsUrl = getWebSocketURL('/ws/chat/');
 
-            ws.current.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                setMessages(prev => [...prev, { id: Date.now() + Math.random(), text: data.message, sender: data.user_id === myId.current ? 'me' : 'them' }]);
-            };
+        ws.current = new WebSocket(wsUrl);
 
-            ws.current.onclose = () => {
-                setIsConnected(false);
-                setMessages(prev => [...prev, { id: Date.now(), text: 'Disconnected from server.', sender: 'system' }]);
-            };
-        } catch (err) {
-            console.error("WebSocket connection failed", err);
-            alert("Connection failed. Is the Django Channels server running?");
-        }
+        ws.current.onopen = () => {
+            // Ask backend to find a match
+            ws.current.send(JSON.stringify({
+                action: 'find_match',
+                user_id: myId.current
+            }));
+        };
+
+        ws.current.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.type === 'waiting') {
+                // Still in queue
+                setStatus('searching');
+            } else if (data.type === 'system_message') {
+                if (data.room_id) {
+                    // Matched!
+                    setStatus('connected');
+                    setRoomId(data.room_id);
+                }
+                setMessages(prev => [...prev, {
+                    id: Date.now() + Math.random(),
+                    text: data.message,
+                    sender: 'system'
+                }]);
+            } else if (data.type === 'chat_message') {
+                setMessages(prev => [...prev, {
+                    id: Date.now() + Math.random(),
+                    text: data.message,
+                    sender: data.user_id === myId.current ? 'me' : 'them'
+                }]);
+            }
+        };
+
+        ws.current.onclose = () => {
+            if (status !== 'idle') {
+                setMessages(prev => [...prev, {
+                    id: Date.now(),
+                    text: 'Disconnected.',
+                    sender: 'system'
+                }]);
+            }
+            setStatus('idle');
+        };
+
+        ws.current.onerror = () => {
+            setStatus('idle');
+            setMessages([{
+                id: Date.now(),
+                text: 'Connection failed. Is the server running?',
+                sender: 'system'
+            }]);
+        };
     };
 
     const sendMessage = (e) => {
         e.preventDefault();
-        if (!inputValue.trim()) return;
+        if (!inputValue.trim() || !ws.current) return;
 
-        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-            ws.current.send(JSON.stringify({
-                message: inputValue,
-                user_id: myId.current
-            }));
-        }
+        ws.current.send(JSON.stringify({
+            action: 'send_message',
+            message: inputValue,
+            user_id: myId.current
+        }));
         setInputValue('');
     };
 
     const disconnect = () => {
-        if (ws.current) {
-            ws.current.close();
-        }
-        setIsConnected(false);
+        if (ws.current) ws.current.close();
+        ws.current = null;
+        setStatus('idle');
         setRoomId(null);
         setMessages([]);
     };
 
+    const findNew = () => {
+        if (ws.current) ws.current.close();
+        ws.current = null;
+        // Small delay to let the old connection close
+        setTimeout(startSearch, 300);
+    };
+
     return (
-        <div className="container" style={{ padding: '2rem 1.5rem', maxWidth: '800px' }}>
-            <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Anonymous Chat</h1>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>Connect safely with strangers near you.</p>
+        <div className="container animate-fade-in-up" style={{ padding: '2rem 1.5rem', maxWidth: '720px' }}>
+            <div style={{ marginBottom: '1.5rem' }}>
+                <h1 style={{ fontSize: '1.5rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <MessageCircle size={22} color="var(--accent-primary)" /> Anonymous Chat
+                </h1>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                    Get matched with a random stranger near you.
+                </p>
+            </div>
 
-            {!isConnected ? (
-                <Card style={{ textAlign: 'center', padding: '3rem 1rem' }}>
-                    <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Find a Connection</h2>
-                    <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>Click below to be matched with a random anonymous user.</p>
-                    <Button variant="primary" onClick={connectToChat} size="large">
-                        Start Chatting
-                    </Button>
-                </Card>
+            {status === 'idle' ? (
+                /* ─── Start Screen ─── */
+                <div className="card" style={{ textAlign: 'center', padding: '3.5rem 1.5rem' }}>
+                    <div style={{
+                        width: '64px', height: '64px', borderRadius: '50%',
+                        background: 'var(--accent-light)', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center',
+                        margin: '0 auto 1.25rem',
+                    }}>
+                        <Radio size={28} color="var(--accent-primary)" />
+                    </div>
+                    <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Find a Connection</h2>
+                    <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '0.85rem', maxWidth: '320px', margin: '0 auto 2rem' }}>
+                        You'll be matched with a random anonymous user for a private conversation.
+                    </p>
+                    <button className="btn btn-primary btn-lg" onClick={startSearch}>
+                        Start Searching
+                    </button>
+                </div>
+            ) : status === 'searching' ? (
+                /* ─── Searching / Queued ─── */
+                <div className="card" style={{ textAlign: 'center', padding: '4rem 1.5rem' }}>
+                    <div style={{
+                        width: '64px', height: '64px', borderRadius: '50%',
+                        background: 'var(--accent-light)', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center',
+                        margin: '0 auto 1.5rem',
+                        animation: 'pulse 2s infinite',
+                    }}>
+                        <Search size={28} color="var(--accent-primary)" />
+                    </div>
+                    <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Searching for a Partner...</h2>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '2rem' }}>
+                        Waiting for someone else to join. Hang tight!
+                    </p>
+                    <div className="typing-indicator" style={{ justifyContent: 'center', marginBottom: '2rem' }}>
+                        <span /><span /><span />
+                    </div>
+                    <button className="btn btn-ghost" onClick={disconnect}>
+                        Cancel
+                    </button>
+                </div>
             ) : (
-                <Card style={{ height: '600px', display: 'flex', flexDirection: 'column' }}>
-                    <CardHeader style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
-                        <div>
-                            <span className="badge" style={{ backgroundColor: 'var(--accent-light)', color: 'var(--accent-hover)' }}>Live</span>
-                            <span style={{ marginLeft: '1rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Room: {roomId}</span>
+                /* ─── Chat Room ─── */
+                <div className="card" style={{ height: '520px', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
+                    {/* Header */}
+                    <div style={{
+                        padding: '0.75rem 1.25rem',
+                        borderBottom: '1px solid var(--border-color)',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span className="badge" style={{ backgroundColor: '#ecfdf5', color: 'var(--success)' }}>
+                                <span className="pulse-dot" style={{ marginRight: '0.35rem' }} /> Matched
+                            </span>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Room {roomId}</span>
                         </div>
-                        <Button variant="secondary" onClick={disconnect}>Leave Room</Button>
-                    </CardHeader>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button className="btn btn-ghost btn-sm" onClick={findNew} style={{ fontSize: '0.78rem' }}>
+                                <Search size={13} /> New Match
+                            </button>
+                            <button className="btn btn-ghost btn-sm" onClick={disconnect} style={{ color: 'var(--danger)', fontSize: '0.78rem' }}>
+                                <LogOut size={13} /> Leave
+                            </button>
+                        </div>
+                    </div>
 
-                    <CardBody style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem' }}>
-                        {messages.map((msg) => (
-                            <div
-                                key={msg.id}
-                                style={{
-                                    alignSelf: msg.sender === 'me' ? 'flex-end' : msg.sender === 'system' ? 'center' : 'flex-start',
-                                    backgroundColor: msg.sender === 'me' ? 'var(--accent-primary)' : msg.sender === 'system' ? 'transparent' : 'var(--bg-secondary)',
-                                    color: msg.sender === 'me' ? 'white' : msg.sender === 'system' ? 'var(--text-muted)' : 'var(--text-primary)',
-                                    padding: msg.sender === 'system' ? '0' : '0.75rem 1rem',
-                                    borderRadius: msg.sender === 'me' ? '1rem 1rem 0 1rem' : msg.sender === 'system' ? '0' : '1rem 1rem 1rem 0',
-                                    maxWidth: '70%',
-                                    fontSize: msg.sender === 'system' ? '0.75rem' : '1rem',
-                                    border: msg.sender === 'them' ? '1px solid var(--border-color)' : 'none'
-                                }}
-                            >
+                    {/* Messages */}
+                    <div style={{
+                        flex: 1, overflowY: 'auto', padding: '1rem 1.25rem',
+                        display: 'flex', flexDirection: 'column', gap: '0.5rem',
+                    }}>
+                        {messages.map(msg => (
+                            <div key={msg.id} className={`chat-bubble ${msg.sender}`}>
                                 {msg.text}
                             </div>
                         ))}
-                    </CardBody>
+                        <div ref={messagesEndRef} />
+                    </div>
 
-                    <CardFooter style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginTop: '0' }}>
-                        <form onSubmit={sendMessage} style={{ display: 'flex', gap: '0.5rem' }}>
-                            <Input
-                                value={inputValue}
-                                onChange={(e) => setInputValue(e.target.value)}
-                                placeholder="Type your message..."
-                                style={{ flex: 1, marginBottom: 0 }}
-                            />
-                            <Button type="submit" variant="primary">Send</Button>
-                        </form>
-                    </CardFooter>
-                </Card>
+                    {/* Input */}
+                    <form onSubmit={sendMessage} style={{
+                        padding: '0.75rem 1.25rem',
+                        borderTop: '1px solid var(--border-color)',
+                        display: 'flex', gap: '0.5rem',
+                    }}>
+                        <input
+                            className="input"
+                            value={inputValue}
+                            onChange={(e) => setInputValue(e.target.value)}
+                            placeholder="Type your message..."
+                            autoFocus
+                        />
+                        <button type="submit" className="btn btn-primary" disabled={!inputValue.trim()}>
+                            <Send size={16} />
+                        </button>
+                    </form>
+                </div>
             )}
         </div>
     );

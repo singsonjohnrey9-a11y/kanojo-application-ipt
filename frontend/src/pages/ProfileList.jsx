@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Card, CardBody, CardFooter } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import axios from 'axios';
-import { Heart, Sparkles, MapPin } from 'lucide-react';
+import api from '../api/config';
+import { Heart, MapPin, Sparkles } from 'lucide-react';
 
 const RANK_COLORS = {
     BRONZE: 'bronze',
@@ -12,24 +10,27 @@ const RANK_COLORS = {
     PLATINUM: 'platinum',
 };
 
-const getInitials = (username) => {
-    return username
-        .split('_')
-        .map(w => w[0])
-        .join('')
-        .toUpperCase()
-        .slice(0, 2);
-};
+const getInitials = (name) =>
+    name.split(/[\s_]+/).map(w => w[0]).join('').toUpperCase().slice(0, 2);
 
-// Softer, kawaii gradients
 const GRADIENT_COLORS = [
-    ['#ff9a9e', '#fecfef'],
     ['#fbc2eb', '#a6c1ee'],
-    ['#fdcbf1', '#e6dee9'],
     ['#a1c4fd', '#c2e9fb'],
     ['#ffecd2', '#fcb69f'],
-    ['#cfd9df', '#e2ebf0'],
+    ['#fdcbf1', '#e6dee9'],
+    ['#ff9a9e', '#fecfef'],
+    ['#d4fc79', '#96e6a1'],
 ];
+
+/* Skeleton Card for Loading */
+const SkeletonCard = () => (
+    <div className="skeleton-card">
+        <div className="skeleton skeleton-img" />
+        <div className="skeleton skeleton-text" />
+        <div className="skeleton skeleton-text short" />
+        <div className="skeleton skeleton-btn" />
+    </div>
+);
 
 export const ProfileList = () => {
     const navigate = useNavigate();
@@ -37,15 +38,11 @@ export const ProfileList = () => {
     const [profiles, setProfiles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-
     const selectedArea = searchParams.get('area') || 'All Cebu';
 
     useEffect(() => {
-        axios.get('/api/profiles/')
-            .then(res => {
-                setProfiles(res.data);
-                setLoading(false);
-            })
+        api.get('/api/profiles/')
+            .then(res => { setProfiles(res.data); setLoading(false); })
             .catch(err => {
                 console.error('Failed to fetch profiles:', err);
                 setError('Failed to load cast list. Please try again.');
@@ -53,12 +50,10 @@ export const ProfileList = () => {
             });
     }, []);
 
-    // Filter logic
     const displayedProfiles = selectedArea === 'All Cebu'
         ? profiles
         : profiles.filter(p => p.location.includes(selectedArea));
 
-    // Grouping by location if 'All Cebu' is selected
     const groupedProfiles = displayedProfiles.reduce((acc, profile) => {
         const loc = profile.location;
         if (!acc[loc]) acc[loc] = [];
@@ -66,54 +61,62 @@ export const ProfileList = () => {
         return acc;
     }, {});
 
-    if (loading) {
-        return (
-            <div className="container" style={{ padding: '6rem 1.5rem', textAlign: 'center' }}>
-                <div style={{ fontSize: '1.25rem', color: 'var(--accent-primary)', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                    Fetching Cast List... <Heart size={24} />
-                </div>
-            </div>
-        );
-    }
-
     if (error) {
         return (
-            <div className="container" style={{ padding: '6rem 1.5rem', textAlign: 'center' }}>
-                <div style={{ fontSize: '1.25rem', color: '#ef4444' }}>{error}</div>
+            <div className="container" style={{ padding: '5rem 1.5rem', textAlign: 'center' }}>
+                <p style={{ fontSize: '1.1rem', color: 'var(--danger)' }}>{error}</p>
             </div>
         );
     }
 
     return (
-        <div className="container" style={{ padding: '3rem 1.5rem' }}>
-            <h1 style={{ fontSize: '2.5rem', marginBottom: '0.5rem', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <Sparkles size={36} color="var(--accent-primary)" /> {selectedArea === 'All Cebu' ? 'All Active Cast Members' : `Cast List: ${selectedArea}`}
-            </h1>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '3rem', fontSize: '1.1rem' }}>
-                Browse our verified companions. Find the perfect match for your day!
-            </p>
+        <div className="container" style={{ padding: '2rem 1.5rem 4rem' }}>
+            {/* Page Header */}
+            <div className="animate-fade-in-up" style={{ marginBottom: '2rem' }}>
+                <h1 style={{
+                    fontSize: '1.75rem', marginBottom: '0.35rem',
+                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                }}>
+                    <Sparkles size={24} color="var(--accent-primary)" />
+                    {selectedArea === 'All Cebu' ? 'All Active Cast' : selectedArea}
+                </h1>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                    {loading ? 'Loading...' : `${displayedProfiles.length} companions available`}
+                </p>
+            </div>
 
-            {displayedProfiles.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '6rem 0', color: 'var(--text-muted)' }}>
-                    <p style={{ fontSize: '1.25rem', fontWeight: '700' }}>No cast members available in {selectedArea} right now.</p>
-                    <p>Please check back soon!</p>
+            {/* Loading Skeleton */}
+            {loading && (
+                <div className="profile-grid">
+                    {Array.from({ length: 10 }).map((_, i) => <SkeletonCard key={i} />)}
                 </div>
-            ) : Object.entries(groupedProfiles).map(([location, locProfiles]) => (
-                <div key={location} style={{ marginBottom: '4rem' }}>
+            )}
+
+            {/* Empty State */}
+            {!loading && displayedProfiles.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '4rem 0', color: 'var(--text-muted)' }}>
+                    <Heart size={48} style={{ color: 'var(--border-color)', marginBottom: '1rem' }} />
+                    <p style={{ fontSize: '1.1rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+                        No cast members in {selectedArea}
+                    </p>
+                    <p style={{ fontSize: '0.85rem' }}>Check back soon or browse another area!</p>
+                </div>
+            )}
+
+            {/* Profile Cards */}
+            {!loading && Object.entries(groupedProfiles).map(([location, locProfiles]) => (
+                <div key={location} style={{ marginBottom: '3rem' }}>
                     <h2 style={{
-                        fontSize: '1.75rem',
-                        borderBottom: '3px solid var(--border-color)',
-                        paddingBottom: '0.5rem',
-                        marginBottom: '1.5rem',
-                        color: 'var(--text-primary)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem'
+                        fontSize: '1.1rem', fontWeight: '700',
+                        borderBottom: '2px solid var(--border-color)',
+                        paddingBottom: '0.5rem', marginBottom: '1.25rem',
+                        display: 'flex', alignItems: 'center', gap: '0.4rem',
+                        color: 'var(--text-secondary)',
                     }}>
-                        <MapPin size={28} color="var(--accent-primary)" /> {location}
+                        <MapPin size={18} color="var(--accent-primary)" /> {location}
                     </h2>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '2rem' }}>
+                    <div className="profile-grid">
                         {locProfiles.map((profile, index) => {
                             const ribbonClass = RANK_COLORS[profile.rank] || 'bronze';
                             const gradient = GRADIENT_COLORS[index % GRADIENT_COLORS.length];
@@ -122,76 +125,69 @@ export const ProfileList = () => {
                                 : profile.user?.username || 'Unknown';
 
                             return (
-                                <Card key={profile.id}>
+                                <div
+                                    key={profile.id}
+                                    className={`card animate-fade-in-up stagger-${(index % 5) + 1}`}
+                                    style={{ padding: 0, cursor: 'pointer' }}
+                                    onClick={() => navigate(`/rent/${profile.id}`)}
+                                >
                                     {/* Ribbon */}
                                     <div className="ribbon-wrapper">
                                         <div className={`ribbon ${ribbonClass}`}>{profile.rank}</div>
                                     </div>
 
-                                    {/* Avatar Header */}
+                                    {/* Avatar */}
                                     <div style={{
-                                        height: '240px',
-                                        background: `linear-gradient(135deg, ${gradient[0]} 0%, ${gradient[1]} 100%)`,
-                                        margin: '-1.5rem -1.5rem 1rem -1.5rem',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        boxShadow: 'inset 0 -10px 20px rgba(0,0,0,0.05)'
+                                        height: '180px',
+                                        background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]})`,
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        position: 'relative', overflow: 'hidden',
                                     }}>
                                         {profile.image ? (
                                             <img
                                                 src={profile.image}
                                                 alt={displayName}
-                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.3s ease' }}
+                                                onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
+                                                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                                             />
                                         ) : (
                                             <span style={{
-                                                fontSize: '4rem',
-                                                fontWeight: '800',
-                                                color: 'rgba(255,255,255,0.95)',
-                                                textShadow: '0 4px 12px rgba(230,0,126,0.2)',
+                                                fontSize: '2.5rem', fontWeight: '800',
+                                                color: 'rgba(255,255,255,0.9)',
                                             }}>
                                                 {getInitials(displayName)}
                                             </span>
                                         )}
                                     </div>
 
-                                    <CardBody style={{ padding: '0' }}>
-                                        <div className="flex-between" style={{ marginBottom: '0.25rem' }}>
-                                            <h2 style={{ fontSize: '1.5rem', color: 'var(--accent-primary)' }}>{displayName}</h2>
-                                        </div>
-
+                                    {/* Info */}
+                                    <div style={{ padding: '1rem' }}>
+                                        <h3 style={{ fontSize: '0.95rem', fontWeight: '700', marginBottom: '0.25rem', color: 'var(--text-primary)' }}>
+                                            {displayName}
+                                        </h3>
                                         <p style={{
-                                            color: 'var(--text-secondary)',
-                                            fontSize: '0.9rem',
-                                            marginBottom: '1rem',
-                                            minHeight: '60px',
-                                            lineHeight: '1.6',
-                                            paddingRight: '0.5rem',
+                                            color: 'var(--text-muted)', fontSize: '0.78rem',
+                                            marginBottom: '0.75rem', lineHeight: 1.5,
+                                            display: '-webkit-box', WebkitLineClamp: 2,
+                                            WebkitBoxOrient: 'vertical', overflow: 'hidden',
                                         }}>
                                             {profile.bio || 'No bio available.'}
                                         </p>
 
-                                        <div style={{ backgroundColor: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                                            <div className="flex-between" style={{ fontSize: '0.85rem', marginBottom: '0.25rem' }}>
-                                                <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}><MapPin size={14} /> Area</span>
-                                                <span style={{ fontWeight: '700' }}>{profile.location.split(',')[0]}</span>
-                                            </div>
-                                            <div className="flex-between" style={{ fontSize: '0.85rem' }}>
-                                                <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}><Heart size={14} color="var(--accent-primary)" /> Rate</span>
-                                                <span style={{ fontWeight: '800', color: 'var(--text-primary)' }}>
-                                                    ₱{parseFloat(profile.hourly_rate).toLocaleString()} <span style={{ fontSize: '0.75rem', fontWeight: '500' }}>/ hr</span>
-                                                </span>
-                                            </div>
+                                        <div style={{
+                                            display: 'flex', justifyContent: 'space-between',
+                                            alignItems: 'center', fontSize: '0.78rem',
+                                        }}>
+                                            <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                                                <MapPin size={12} /> {profile.location.split(',')[0]}
+                                            </span>
+                                            <span style={{ fontWeight: '700', color: 'var(--accent-primary)' }}>
+                                                ₱{parseFloat(profile.hourly_rate).toLocaleString()}<span style={{ fontWeight: '400', fontSize: '0.65rem' }}>/hr</span>
+                                            </span>
                                         </div>
-                                    </CardBody>
-
-                                    <CardFooter style={{ marginTop: '0', paddingTop: '0', borderTop: 'none' }}>
-                                        <Button variant="primary" style={{ width: '100%' }} onClick={() => navigate(`/rent/${profile.id}`)}>
-                                            Select & Rent
-                                        </Button>
-                                    </CardFooter>
-                                </Card>
+                                    </div>
+                                </div>
                             );
                         })}
                     </div>
