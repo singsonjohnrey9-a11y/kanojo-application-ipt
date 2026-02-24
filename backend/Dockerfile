@@ -12,6 +12,9 @@ COPY . .
 # Collect static files
 RUN python manage.py collectstatic --no-input
 
+# Create media dir for uploaded images
+RUN mkdir -p media/profiles
+
 # Make entrypoint executable
 RUN chmod +x entrypoint.sh
 

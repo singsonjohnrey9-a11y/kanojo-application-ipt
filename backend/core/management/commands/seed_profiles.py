@@ -483,23 +483,23 @@ class Command(BaseCommand):
                 }
             )
 
-            # Always re-attach images (Docker containers lose files on redeploy)
+            # ALWAYS write image files (Docker containers lose files on every redeploy)
             if 'image' in data:
                 img_path = os.path.join(SEED_IMG_DIR, data['image'])
-                # Check if actual file exists on disk (not just DB reference)
-                needs_image = not profile.image or not os.path.exists(profile.image.path) if profile.image else True
-                if needs_image and os.path.exists(img_path):
-                    # Clear old DB reference
-                    if profile.image:
-                        profile.image.delete(save=False)
-                    with open(img_path, 'rb') as f:
-                        profile.image.save(
-                            f"{user.username}_{data['image']}",
-                            File(f),
-                            save=True
-                        )
-                    self.stdout.write(f'  📷 Image attached for {user.username}')
-                elif not os.path.exists(img_path):
+                if os.path.exists(img_path):
+                    try:
+                        with open(img_path, 'rb') as f:
+                            # Force overwrite: clear name so Django writes a fresh file
+                            profile.image.name = ''
+                            profile.image.save(
+                                f"{user.username}_{data['image']}",
+                                File(f),
+                                save=True
+                            )
+                        self.stdout.write(f'  📷 Image saved for {user.username}')
+                    except Exception as e:
+                        self.stdout.write(self.style.WARNING(f'  ⚠ Image error for {user.username}: {e}'))
+                else:
                     self.stdout.write(self.style.WARNING(f'  ⚠ Image not found: {img_path}'))
 
             if user_created:
