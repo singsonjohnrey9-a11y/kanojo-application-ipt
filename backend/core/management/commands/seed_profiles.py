@@ -384,10 +384,15 @@ class Command(BaseCommand):
                 }
             )
 
-            # Assign image if the file exists
-            if 'image' in data and not profile.image:
+            # Always re-attach images (Docker containers lose files on redeploy)
+            if 'image' in data:
                 img_path = os.path.join(SEED_IMG_DIR, data['image'])
-                if os.path.exists(img_path):
+                # Check if actual file exists on disk (not just DB reference)
+                needs_image = not profile.image or not os.path.exists(profile.image.path) if profile.image else True
+                if needs_image and os.path.exists(img_path):
+                    # Clear old DB reference
+                    if profile.image:
+                        profile.image.delete(save=False)
                     with open(img_path, 'rb') as f:
                         profile.image.save(
                             f"{user.username}_{data['image']}",
@@ -395,7 +400,7 @@ class Command(BaseCommand):
                             save=True
                         )
                     self.stdout.write(f'  📷 Image attached for {user.username}')
-                else:
+                elif not os.path.exists(img_path):
                     self.stdout.write(self.style.WARNING(f'  ⚠ Image not found: {img_path}'))
 
             if user_created:
