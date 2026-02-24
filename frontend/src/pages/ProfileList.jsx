@@ -3,9 +3,15 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../api/config';
 import { Heart, MapPin, Sparkles } from 'lucide-react';
 
-// Fix mixed content: ensure image URLs use https in production
+// Fix image URLs: prepend API base URL for relative paths, ensure https
+const API_BASE = import.meta.env.VITE_API_URL || '';
 const fixImageUrl = (url) => {
     if (!url) return null;
+    // If relative path (starts with /), prepend the API base URL
+    if (url.startsWith('/')) {
+        url = API_BASE + url;
+    }
+    // Ensure https in production
     return url.replace(/^http:\/\//, 'https://');
 };
 
