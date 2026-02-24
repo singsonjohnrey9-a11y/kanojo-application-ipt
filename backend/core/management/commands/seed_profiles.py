@@ -510,6 +510,18 @@ class Command(BaseCommand):
             else:
                 self.stdout.write(f'  Updated: {user.username} ({data["location"]})')
 
+        # Clean up old seed profiles that are no longer in the PROFILES list
+        current_usernames = [p['username'] for p in PROFILES]
+        seed_emails = [p['email'] for p in PROFILES]
+        # Only delete users with @rentcebu.com emails (seed accounts) that aren't in current list
+        old_users = User.objects.filter(
+            email__endswith='@rentcebu.com'
+        ).exclude(username__in=current_usernames)
+        if old_users.exists():
+            count = old_users.count()
+            old_users.delete()
+            self.stdout.write(self.style.WARNING(f'\n🗑 Removed {count} old seed profiles'))
+
         self.stdout.write(self.style.SUCCESS(
             f'\n🎉 Done! {created_count} new profiles created. {len(PROFILES)} total profiles in database.'
         ))
