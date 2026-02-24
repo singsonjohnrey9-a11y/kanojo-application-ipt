@@ -37,6 +37,10 @@ RAILWAY_PUBLIC_DOMAIN = os.environ.get('RAILWAY_PUBLIC_DOMAIN')
 if RAILWAY_PUBLIC_DOMAIN:
     ALLOWED_HOSTS.append(RAILWAY_PUBLIC_DOMAIN)
 
+# Always allow Railway domains
+if not any('.railway.app' in h for h in ALLOWED_HOSTS):
+    ALLOWED_HOSTS.append('.railway.app')
+
 
 # Application definition
 
@@ -158,6 +162,11 @@ AUTH_USER_MODEL = 'core.User'
 # CORS — Allow frontend origin in production
 CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',') if os.environ.get('CORS_ALLOWED_ORIGINS') else []
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only allow all in development
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = [
+    'accept', 'accept-encoding', 'authorization', 'content-type',
+    'dnt', 'origin', 'user-agent', 'x-csrftoken', 'x-requested-with',
+]
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
