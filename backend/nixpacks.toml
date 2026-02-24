@@ -1,0 +1,15 @@
+# Tell Nixpacks exactly how to build and run this Django ASGI app
+[phases.setup]
+nixPkgs = ["python312"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[phases.build]
+cmds = [
+    "python manage.py collectstatic --no-input",
+    "python manage.py migrate"
+]
+
+[start]
+cmd = "daphne -b 0.0.0.0 -p ${PORT:-8000} config.asgi:application"

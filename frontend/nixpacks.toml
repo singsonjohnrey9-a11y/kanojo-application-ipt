@@ -1,0 +1,12 @@
+# Tell Nixpacks how to build and serve the React frontend
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+cmds = ["npm install"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npx -y serve dist -s -l ${PORT:-3000}"
