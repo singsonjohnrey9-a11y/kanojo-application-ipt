@@ -12,9 +12,9 @@ COPY . .
 # Collect static files
 RUN python manage.py collectstatic --no-input
 
-# Expose port
+# Make entrypoint executable
+RUN chmod +x entrypoint.sh
+
 EXPOSE 8000
 
-# Start with Daphne (ASGI — supports HTTP + WebSockets)
-# Use shell form so $PORT gets expanded
-CMD ["/bin/sh", "-c", "python manage.py migrate && daphne -b 0.0.0.0 -p $PORT config.asgi:application"]
+ENTRYPOINT ["./entrypoint.sh"]
