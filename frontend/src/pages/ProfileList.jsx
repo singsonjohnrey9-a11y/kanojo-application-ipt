@@ -74,7 +74,7 @@ export const ProfileList = () => {
     }
 
     return (
-        <div className="container" style={{ padding: '2rem 1.5rem 4rem' }}>
+        <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2rem 1.5rem 4rem' }}>
             {/* Page Header */}
             <div className="animate-fade-in-up" style={{ marginBottom: '1.5rem' }}>
                 <h1 style={{
