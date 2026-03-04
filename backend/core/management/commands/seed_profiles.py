@@ -46,10 +46,10 @@ PROFILES = [
         'image': 'a3.jpeg',
     },
     {
-        'username': 'bituin_nightlife',
-        'email': 'bituin@rentcebu.com',
-        'first_name': 'Bituin',
-        'last_name': 'Macapagal',
+        'username': 'Mamy _nightlife',
+        'email': 'Mamy jupetarentcebu.com',
+        'first_name': 'Mamy ',
+        'last_name': 'jupeta',
         'bio': 'A certified night owl! Let me show you the vibrant nightlife and best clubs around the city!',
         'hourly_rate': 1000.00,
         'rank': 'GOLD',
@@ -232,7 +232,7 @@ PROFILES = [
     {
         'username': 'lakan_resort',
         'email': 'lakan@rentcebu.com',
-        'first_name': 'JohnRey',
+        'first_name': 'John ',
         'last_name': 'Singson',
         'bio': 'Your perfect Mactan Island guide! Let\'s go resort hopping or island hopping.',
         'hourly_rate': 1500.00,
