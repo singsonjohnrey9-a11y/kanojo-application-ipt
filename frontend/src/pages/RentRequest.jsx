@@ -5,9 +5,9 @@ import api from '../api/config';
 import { ArrowLeft, Minus, Plus, CheckCircle, MapPin, Clock, Star } from 'lucide-react';
 
 const GRADIENT_COLORS = [
-    ['#fbc2eb', '#a6c1ee'],
-    ['#a1c4fd', '#c2e9fb'],
-    ['#ffecd2', '#fcb69f'],
+    ['#e0e0e0', '#c0c0c0'],
+    ['#d0d0d0', '#b0b0b0'],
+    ['#c8c8c8', '#a8a8a8'],
 ];
 
 export const RentRequest = () => {

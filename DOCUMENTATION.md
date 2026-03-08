@@ -2,9 +2,9 @@
 
 > **Project Title:** Kanojo (カノジョ) — Rental Companion Platform for Cebu  
 > **Developer:** Singson, John Rey  
-> **Course:** Information and Communications Technology  
+> **Course:**   Bachelor of Science in Information Technology
 > **Date:** March 2026  
-> **Repository:** [GitHub — singson-application](https://github.com/)
+> **Repository:** [GitHub — singson-application](https://github.com/singsonjohnrey9-a11y/kanojo-application-ipt)
 
 ---
 
@@ -32,7 +32,7 @@
 
 **Kanojo** (Japanese: カノジョ, meaning "girlfriend") is a full-stack web application inspired by Japan's *Rental Girlfriend (Kanojo, Okarishimasu)* concept — reimagined for Cebu City, Philippines. The platform operates under the brand name **RentCebu** and allows users to browse, select, and book verified rental companions for social activities such as city tours, cafe dates, event pairings, and more.
 
-The system is built with a modern decoupled architecture: a **Django REST API** backend serving data over HTTP and WebSocket, paired with a **React Single-Page Application (SPA)** frontend. It features JWT-based authentication, real-time anonymous chat, a tiered ranking system for companions, and is fully containerized for cloud deployment.
+The system is built with a modern decoupled architecture: a **Django REST API** backend serving data over HTTP and WebSocket, paired with a **React Single-Page Application (SPA)** frontend. It features JWT-based authentication, real-time anonymous chat, **direct messaging with reactions**, a tiered ranking system for companions, **Philippine legal compliance with 6 safety acts**, **ID verification via Tesseract.js OCR**, a **star-based review system**, and is powered by **Supabase PostgreSQL** in production.
 
 This documentation serves as a comprehensive technical defense of the system's design, implementation, and deployment.
 
@@ -92,10 +92,12 @@ Cebu City is a major metropolitan hub in the Visayas region with a vibrant touri
 | **Django Channels** | 4.3.2 | WebSocket support for real-time chat |
 | **Daphne** | 4.2.1 | ASGI server (HTTP + WebSocket) |
 | **SimpleJWT** | 5.5.1 | JSON Web Token authentication |
+| **DRF AuthToken** | built-in | Token authentication for registration flow |
 | **django-cors-headers** | 4.9.0 | Cross-Origin Resource Sharing |
-| **Pillow** | 12.1.1 | Image processing for profile photos |
+| **Pillow** | 12.1.1 | Image processing for profile photos & ID documents |
 | **WhiteNoise** | 6.8.2 | Static file serving |
 | **psycopg2-binary** | 2.9.10 | PostgreSQL database adapter |
+| **python-dotenv** | latest | Environment variable management |
 | **Gunicorn** | 23.0.0 | WSGI HTTP server (production fallback) |
 
 ### Frontend Stack
@@ -106,20 +108,20 @@ Cebu City is a major metropolitan hub in the Visayas region with a vibrant touri
 | **Vite** | 7.3.1 | Build tool & dev server |
 | **React Router DOM** | 7.13.1 | Client-side routing (SPA) |
 | **Axios** | 1.13.5 | HTTP client for API calls |
-| **Lucide React** | 0.575.0 | Icon library |
+| **Lucide React** | 0.575.0 | Monochrome icon library (all emojis replaced) |
+| **Tesseract.js** | latest | Client-side OCR for ID document scanning |
 | **date-fns** | 4.1.0 | Date formatting utilities |
-| **socket.io-client** | 4.8.3 | WebSocket client (fallback) |
 
 ### Infrastructure & Deployment
 
 | Technology | Purpose |
 |-----------|---------|
+| **Supabase** | Cloud PostgreSQL database (project: `gurosvjmmhzanailwtqe`, Singapore) |
 | **Docker** | Containerization for both backend and frontend |
 | **Nginx** | Static file serving for production frontend |
-| **Render** | Cloud platform deployment (Web Service + Static Site + PostgreSQL) |
+| **Render** | Cloud platform deployment (Web Service + Static Site) |
 | **Railway** | Alternative cloud deployment platform |
-| **SQLite** | Development database |
-| **PostgreSQL** | Production database |
+| **PostgreSQL** | Production database (Supabase-hosted) |
 
 ---
 
@@ -189,6 +191,16 @@ erDiagram
         string password
         boolean is_rentable
         boolean is_active
+        date date_of_birth
+        string verification_status
+        image id_document
+        image id_document_back
+        string ocr_extracted_name
+        string ocr_extracted_dob
+        float ocr_confidence
+        boolean legal_agreements_accepted
+        datetime legal_accepted_at
+        string verification_note
     }
 
     PROFILE {
@@ -228,13 +240,64 @@ erDiagram
         datetime timestamp
     }
 
+    LEGAL_AGREEMENT {
+        int id PK
+        int user_id FK
+        string act_code
+        string act_title
+        datetime accepted_at
+        string ip_address
+    }
+
+    CONVERSATION {
+        int id PK
+        int user1_id FK
+        int user2_id FK
+        datetime created_at
+        datetime updated_at
+    }
+
+    DIRECT_MESSAGE {
+        int id PK
+        int conversation_id FK
+        int sender_id FK
+        text content
+        image image
+        datetime timestamp
+        boolean is_read
+    }
+
+    MESSAGE_REACTION {
+        int id PK
+        int message_id FK
+        int user_id FK
+        string reaction_type
+        datetime created_at
+    }
+
+    REVIEW {
+        int id PK
+        int reviewer_id FK
+        int profile_id FK
+        int rating
+        text comment
+        datetime created_at
+    }
+
     USER ||--o| PROFILE : "has one"
     USER ||--o{ RENT_REQUEST : "sends (as client)"
     PROFILE ||--o{ RENT_REQUEST : "receives"
-    USER ||--o{ CHAT_ROOM : "participates as user1"
-    USER ||--o{ CHAT_ROOM : "participates as user2"
+    USER ||--o{ CHAT_ROOM : "participates"
     CHAT_ROOM ||--o{ MESSAGE : "contains"
     USER ||--o{ MESSAGE : "sends"
+    USER ||--o{ LEGAL_AGREEMENT : "accepts"
+    USER ||--o{ CONVERSATION : "participates"
+    CONVERSATION ||--o{ DIRECT_MESSAGE : "contains"
+    USER ||--o{ DIRECT_MESSAGE : "sends"
+    DIRECT_MESSAGE ||--o{ MESSAGE_REACTION : "receives"
+    USER ||--o{ MESSAGE_REACTION : "creates"
+    USER ||--o{ REVIEW : "writes"
+    PROFILE ||--o{ REVIEW : "receives"
 ```
 
 ### Model Details
@@ -242,12 +305,15 @@ erDiagram
 #### `User` (extends `AbstractUser`)
 - Inherits Django's full authentication system (password hashing, sessions, permissions)
 - Custom field `is_rentable` distinguishes clients from companions
+- **Verification fields:** `date_of_birth`, `verification_status` (UNVERIFIED → PENDING → APPROVED / REJECTED), `id_document` (front/back), OCR data (`ocr_extracted_name`, `ocr_extracted_dob`, `ocr_confidence`)
+- **Legal compliance:** `legal_agreements_accepted`, `legal_accepted_at`
 - Used as `AUTH_USER_MODEL = 'core.User'`
 
 #### `Profile`
 - One-to-one relationship with User
 - **Rank System:** `BRONZE` → `SILVER` → `GOLD` → `PLATINUM`
 - Stores hourly rate in Philippine Peso (₱), location, bio, and profile image
+- **Computed fields:** `average_rating` and `review_count` (via serializer)
 
 #### `RentRequest`
 - Links a client (User) to a companion (Profile)
@@ -259,6 +325,24 @@ erDiagram
 - Messages are ordered by timestamp ascending
 - Chat rooms track active/inactive state
 
+#### `LegalAgreement`
+- Records user consent to specific Philippine safety acts
+- Stores `act_code`, `act_title`, `accepted_at`, and `ip_address` for legal audit
+
+#### `Conversation` & `DirectMessage`
+- Private one-to-one DM conversations between authenticated users
+- `get_or_create_conversation()` ensures consistent user pair storage
+- Messages support text content and image attachments with read tracking (`is_read`)
+
+#### `MessageReaction`
+- Emoji reactions on direct messages: `thumbs_up`, `heart`, `laugh`, `fire`, `sad`
+- One reaction per type per user (toggle on/off)
+
+#### `Review`
+- Star ratings (1–5) with optional comment
+- One review per reviewer per profile (enforced uniqueness)
+- Users cannot review themselves
+
 ---
 
 ## 7. Features & Functionality
@@ -266,17 +350,19 @@ erDiagram
 ### 7.1 Home Page (Hero Section)
 - Animated headline with brand tagline: *"Find Your Kanojo in Cebu"*
 - Quick-access buttons to browse cast and start anonymous chat
-- Live statistics strip (15+ cast members, 6 Cebu areas, 24/7 availability, 100% verified)
+- Live statistics strip (64+ cast members, 6 Cebu areas, 24/7 availability, 100% verified)
+- Monochrome black/white/gray theme throughout
 
 ### 7.2 Profile Browsing & Filtering
-- **Grid-based card layout** displaying all available companions
+- **4-column grid** (desktop) / **3-column grid** (mobile) displaying all 64 companions
 - **Area-based navigation bar** — filter by: All Cebu, Cebu City, Mandaue City, Lapu-Lapu City, Talisay City, Consolacion
-- Each card shows: profile photo (or initials fallback), name, age, location badge, rank ribbon (Regular/Premium), bio, and availability status
+- Each card shows: profile photo (centered, cover fit), name, location badge, rank ribbon, and star rating
 - **Skeleton loading states** for better UX during data fetch
-- **Empty state** with friendly message when no cast members are available in a selected area
+- **Price display** uses ₱ peso sign (visible on individual profile only)
+- **Average rating** and **review count** displayed per profile
 
 ### 7.3 Rent Request System (Booking)
-- Select a companion → view detailed profile header with gradient background
+- Select a companion → view detailed profile header
 - **Hour selector** with increment/decrement buttons (1–24 hours)
 - **Real-time cost calculator:** `Rate × Hours = Total` displayed in Philippine Peso
 - Requires authentication — unauthenticated users are redirected to login
@@ -292,23 +378,70 @@ erDiagram
 - Partner disconnect notifications
 - Chat bubbles styled by sender (me / them / system)
 
-### 7.5 Authentication System
-- **Registration:** Username, email, password, first name, last name
-- **Login:** JWT token-based authentication
-- Auto-login after successful registration
+### 7.5 Authentication & Registration System
+- **4-Step Registration Flow:**
+  1. **Basic Info** — First name, last name, username, email, password (8+ chars)
+  2. **Age Verification** — Date of birth with 20+ age requirement (RA 7610 compliance)
+  3. **Safety Act Acknowledgment** — Must accept all 6 Philippine safety acts
+  4. **ID Upload** — Photo capture/upload with Tesseract.js OCR scanning (optional, can skip)
+- **Login:** JWT token-based authentication with password visibility toggle
 - **Persistent sessions:** Tokens stored in `localStorage`
 - Axios interceptor automatically attaches `Authorization: Bearer <token>` to all API requests
 - 401 responses trigger automatic logout
 
-### 7.6 Responsive Navigation
-- **Desktop:** Horizontal nav bar with links, user avatar, and logout
+### 7.6 Legal Compliance (Philippine Safety Acts)
+All users must acknowledge 6 Philippine Republic Acts during registration:
+
+| Act Code | Title |
+|----------|-------|
+| **RA 9208** | Anti-Trafficking in Persons Act |
+| **RA 10173** | Data Privacy Act |
+| **RA 9262** | Anti-Violence Against Women and Children Act |
+| **RA 7610** | Special Protection of Children Against Abuse |
+| **RA 10175** | Cybercrime Prevention Act |
+| **RA 9995** | Anti-Photo and Video Voyeurism Act |
+
+- Each acceptance is logged with timestamp and IP address in the `LegalAgreement` model
+- Age verification enforces minimum 20 years old
+
+### 7.7 ID Verification & Admin Review
+- **Client-side OCR:** Tesseract.js scans uploaded ID documents, extracting text and confidence score
+- **Admin Dashboard** (`/admin/verifications`): Administrators can:
+  - View pending verification requests with user details and OCR data
+  - Preview uploaded ID documents (front and back)
+  - Approve or reject with optional notes
+- **Verification Status Lifecycle:** `UNVERIFIED` → `PENDING` → `APPROVED` / `REJECTED`
+
+### 7.8 Direct Messaging System
+- **Inbox Page** (`/inbox`): Full-featured private messaging
+  - Conversation sidebar with user avatars, last message preview, and timestamps
+  - **Unread message badges** (red count indicators)
+  - Chat thread with styled bubbles (black = sent, gray = received)
+  - **Read receipts:** Single check (✓) for sent, double check (✓✓ green) for read
+  - **Message reactions:** 👍 ❤️ 😄 🔥 😢 (toggle on/off per message)
+  - Image attachment support
+  - 3-second polling for new messages
+- **Navbar badge:** Red unread count indicator (polls every 10 seconds)
+- **Start conversations** from any profile page via `?user=<id>` URL parameter
+
+### 7.9 Ratings & Reviews
+- **Star ratings:** 1–5 scale per profile
+- **One review per user per profile** (enforced server-side)
+- **Self-review prevention:** Users cannot review their own profile
+- **ProfileSerializer** returns computed `average_rating` and `review_count`
+- Average ratings displayed on profile cards and detail pages
+
+### 7.10 Responsive Navigation
+- **Desktop:** Horizontal nav bar with Cast List, Chat, Messages links + auth controls
 - **Mobile:** Hamburger menu with slide-in drawer overlay
 - Glassmorphism effect with scroll-triggered background transition
 - Active page highlighting
+- **Messages badge** shows unread DM count
 
-### 7.7 Admin Panel
+### 7.11 Admin Panel
 - Full Django Admin interface at `/admin/`
-- Manage Users, Profiles, Rent Requests, Chat Rooms, and Messages
+- Manage Users, Profiles, Rent Requests, Chat Rooms, Messages, Conversations, DMs, Reviews
+- Custom admin page for ID verification at `/admin/verifications`
 - List filters for rank, status, and activity
 - Built-in search and CRUD operations
 
@@ -318,19 +451,50 @@ erDiagram
 
 ### REST API Endpoints
 
-| Method | Endpoint | Auth Required | Description |
-|--------|----------|:------------:|-------------|
+#### Core Endpoints
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|:----:|-------------|
 | `POST` | `/api/token/` | ❌ | Obtain JWT access + refresh tokens |
 | `POST` | `/api/token/refresh/` | ❌ | Refresh an expired access token |
 | `GET` | `/api/users/` | ✅ | List all users |
-| `POST` | `/api/users/` | ❌ | Register a new user (create account) |
-| `GET` | `/api/profiles/` | ❌ | List all companion profiles (public) |
+| `POST` | `/api/users/` | ❌ | Register a new user (legacy) |
+| `GET` | `/api/profiles/` | ❌ | List all profiles (with `average_rating`, `review_count`) |
 | `GET` | `/api/profiles/:id/` | ❌ | Get specific profile details |
 | `POST` | `/api/profiles/` | ✅ | Create a companion profile |
 | `GET` | `/api/requests/` | ✅ | List rent requests (filtered by role) |
 | `POST` | `/api/requests/` | ✅ | Submit a new rent request |
 | `POST` | `/api/requests/:id/accept/` | ✅ | Accept a rent request (companion only) |
 | `POST` | `/api/requests/:id/decline/` | ✅ | Decline a rent request (companion only) |
+
+#### Legal Compliance & Verification Endpoints
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|:----:|-------------|
+| `GET` | `/api/safety-acts/` | ❌ | List all 6 Philippine safety acts |
+| `POST` | `/api/register/` | ❌ | Multi-step registration (age 20+, safety acts) |
+| `POST` | `/api/upload-id/` | ✅ | Upload ID document with OCR data |
+| `GET` | `/api/verification-status/` | ✅ | Check user's verification status |
+| `GET` | `/api/admin/verifications/` | 🔒 | List pending verifications (admin only) |
+| `POST` | `/api/admin/verifications/:id/review/` | 🔒 | Approve/reject verification (admin only) |
+
+#### Direct Messaging Endpoints
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|:----:|-------------|
+| `GET` | `/api/conversations/` | ✅ | List all DM conversations (with `last_message`, `unread_count`) |
+| `POST` | `/api/conversations/start/` | ✅ | Start or get existing conversation with a user |
+| `GET` | `/api/conversations/:id/messages/` | ✅ | Get messages in a conversation (marks as read) |
+| `POST` | `/api/conversations/:id/send/` | ✅ | Send a message (text + optional image) |
+| `POST` | `/api/messages/:id/react/` | ✅ | Toggle a reaction on a message |
+| `GET` | `/api/messages/unread/` | ✅ | Get total unread DM count |
+
+#### Review Endpoints
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|:----:|-------------|
+| `GET` | `/api/profiles/:id/reviews/` | ❌ | List all reviews for a profile |
+| `POST` | `/api/profiles/:id/reviews/create/` | ✅ | Submit a review (1-5 stars, one per user) |
 
 ### WebSocket Endpoint
 
@@ -342,16 +506,18 @@ erDiagram
 
 | Function | File | Purpose |
 |----------|------|---------|
-| `UserViewSet` | `views.py` | CRUD operations for users; `create` is public, rest requires auth |
-| `ProfileViewSet` | `views.py` | CRUD for profiles; read is public, write requires auth |
+| `UserViewSet` | `views.py` | CRUD operations for users |
+| `ProfileViewSet` | `views.py` | CRUD for profiles with `average_rating` and `review_count` |
 | `RentRequestViewSet` | `views.py` | Business logic for rent requests with role-based filtering |
-| `RentRequestViewSet.accept()` | `views.py` | Custom action — only the profile owner can accept |
-| `RentRequestViewSet.decline()` | `views.py` | Custom action — only the profile owner can decline |
-| `RentRequest.save()` | `models.py` | Auto-calculates `total_cost` before saving |
-| `AnonymousChatConsumer` | `consumers.py` | WebSocket consumer handling matchmaking, messaging, and disconnect |
-| `AnonymousChatConsumer.find_match()` | `consumers.py` | Matchmaking algorithm using an in-memory queue |
-| `Command.handle()` | `seed_profiles.py` | Management command to seed 35+ sample profiles with images |
-| `UserSerializer.create()` | `serializers.py` | Secure user creation using `create_user()` (password hashing) |
+| `register_user()` | `views.py` | Multi-step registration with age validation and safety act acceptance |
+| `upload_id_document()` | `views.py` | ID upload with OCR data storage |
+| `admin_review_verification()` | `views.py` | Admin approve/reject verification requests |
+| `conversation_list()` | `views.py` | List DM conversations with last message and unread count |
+| `send_dm()` | `views.py` | Send direct messages with image attachment support |
+| `toggle_reaction()` | `views.py` | Toggle emoji reactions on messages |
+| `create_review()` | `views.py` | Create star rating with duplicate and self-review prevention |
+| `AnonymousChatConsumer` | `consumers.py` | WebSocket consumer for matchmaking and messaging |
+| `Command.handle()` | `seed_profiles.py` | Management command to seed 64 sample profiles with images |
 
 ---
 
@@ -362,21 +528,20 @@ erDiagram
 | Component | File | Description |
 |-----------|------|-------------|
 | `Home` | `App.jsx` | Landing page with hero section, CTA buttons, and stats strip |
-| `ProfileList` | `ProfileList.jsx` | Grid view of all companions with area filtering and skeleton loading |
+| `ProfileList` | `ProfileList.jsx` | 4-column grid view of 64 companions with area filtering, star ratings, and skeleton loading |
 | `RentRequest` | `RentRequest.jsx` | Booking page with profile detail, hour selector, and cost calculator |
 | `AnonymousChat` | `AnonymousChat.jsx` | Three-state real-time chat (idle/searching/connected) |
-| `Login` | `Login.jsx` | JWT login form with error handling |
-| `Register` | `Register.jsx` | User registration with auto-login |
+| `Login` | `Login.jsx` | JWT login form with password toggle and Lucide icons |
+| `Register` | `Register.jsx` | 4-step registration (basic info → age → safety acts → ID upload with OCR) |
+| `Inbox` | `Inbox.jsx` | DM inbox with conversation sidebar, chat bubbles, reactions, read receipts |
+| `AdminVerification` | `AdminVerification.jsx` | Admin dashboard for reviewing pending ID verifications |
 
 ### Components
 
 | Component | File | Description |
 |-----------|------|-------------|
-| `Navbar` | `Navbar.jsx` | Responsive nav with glassmorphism, mobile drawer, and auth-aware links |
+| `Navbar` | `Navbar.jsx` | Responsive nav with Cast List, Chat, Messages links + unread DM badge |
 | `AreaNav` | `App.jsx` | Horizontal area filter bar with 6 Cebu locations |
-| `Button` | `ui/Button.jsx` | Reusable button component |
-| `Card` | `ui/Card.jsx` | Reusable card container |
-| `Input` | `ui/Input.jsx` | Reusable input field component |
 
 ### Context & Services
 
@@ -392,13 +557,16 @@ erDiagram
 |----------|----------|---------|
 | `fixImageUrl()` | `ProfileList.jsx` | Normalizes relative image paths and forces HTTPS |
 | `getInitials()` | `ProfileList.jsx` | Generates avatar initials from a name |
-| `getAge()` | `ProfileList.jsx` | Deterministic age generation from profile ID |
 | `startSearch()` | `AnonymousChat.jsx` | Initiates WebSocket connection and matchmaking |
 | `sendMessage()` | `AnonymousChat.jsx` | Sends chat message over WebSocket |
 | `handleSubmit()` | `RentRequest.jsx` | Submits rent request via POST and handles success state |
 | `loginUser()` | `AuthContext.jsx` | Authenticates user, stores JWT tokens, redirects to home |
-| `registerUser()` | `AuthContext.jsx` | Creates account via API and auto-logs in |
 | `logoutUser()` | `AuthContext.jsx` | Clears tokens from state and localStorage, redirects to login |
+| `fetchConversations()` | `Inbox.jsx` | Loads DM conversations with unread counts |
+| `handleSend()` | `Inbox.jsx` | Sends DM via FormData with optional image attachment |
+| `handleReact()` | `Inbox.jsx` | Toggles emoji reactions on messages |
+| `runOCR()` | `Register.jsx` | Runs Tesseract.js OCR on uploaded ID document |
+| `handleRegister()` | `Register.jsx` | Multi-step registration with safety act validation |
 
 ---
 
@@ -482,17 +650,20 @@ sequenceDiagram
 | **Password Hashing** | Django's `create_user()` uses PBKDF2 with SHA256 | Passwords are never stored in plain text |
 | **JWT Authentication** | Access tokens (1-day lifetime) + Refresh tokens (7-day lifetime) | Stateless auth — no server-side session storage needed |
 | **Write-Only Password Field** | `serializers.CharField(write_only=True)` | Passwords are never returned in API responses |
-| **CORS Protection** | `django-cors-headers` — restrictive in production, permissive only in `DEBUG=True` | Prevents unauthorized cross-origin requests |
+| **Age Verification** | Server-side DOB validation (minimum 20 years) | Compliance with RA 7610 |
+| **Legal Compliance** | 6 Philippine safety acts with timestamped + IP-logged consent | Full audit trail for legal protection |
+| **ID Verification** | Encrypted ID storage with OCR + admin review workflow | Identity verification before full access |
+| **Conversation Authorization** | DM endpoints verify user membership in conversation | Users can only read/send to their own conversations |
+| **Self-Review Prevention** | Server rejects reviews where `reviewer == profile.user` | Prevents rating manipulation |
+| **Duplicate Review Prevention** | Unique constraint on `(reviewer, profile)` pair | One review per user per profile |
+| **CORS Protection** | `django-cors-headers` — restrictive in production | Prevents unauthorized cross-origin requests |
 | **CSRF Protection** | Django middleware `CsrfViewMiddleware` enabled | Protects against cross-site request forgery |
 | **Clickjacking Protection** | `XFrameOptionsMiddleware` enabled | Prevents embedding the site in iframes |
-| **Password Validators** | 4 built-in validators (similarity, min length, common passwords, numeric-only) | Enforces strong password policies |
-| **Permission Classes** | `IsAuthenticated`, `IsAuthenticatedOrReadOnly`, `AllowAny` per view | Granular access control on every endpoint |
-| **Owner-Only Actions** | `accept()` and `decline()` verify `request.user == rent_request.profile.user` | Only the companion can manage their own requests |
+| **Permission Classes** | `IsAuthenticated`, `IsAuthenticatedOrReadOnly`, `IsAdminUser`, `AllowAny` per view | Granular access control on every endpoint |
+| **Owner-Only Actions** | `accept()` and `decline()` verify `request.user == profile.user` | Only the companion can manage their own requests |
 | **Secret Key from Environment** | `SECRET_KEY = os.environ.get('SECRET_KEY', ...)` | Production secret is never committed to code |
-| **Debug Mode Off in Production** | `DEBUG = os.environ.get('DEBUG', 'True')` defaults to True only locally | Prevents detailed error pages from leaking in production |
-| **WhiteNoise for Static Files** | Compressed manifest storage | Secure, efficient static file serving without exposing the filesystem |
-| **Auto-Logout on 401** | Axios response interceptor detects unauthorized responses | Expired tokens are immediately cleared, preventing stale sessions |
-| **HTTPS Enforcement** | `fixImageUrl()` rewrites `http://` to `https://` | Ensures all media is served over encrypted connections |
+| **Auto-Logout on 401** | Axios response interceptor detects unauthorized responses | Expired tokens are immediately cleared |
+| **Data Privacy (RA 10173)** | ID documents stored with restricted access, OCR data encrypted | Compliance with Philippine Data Privacy Act |
 
 ### CORS Configuration
 
@@ -515,24 +686,35 @@ CORS_ALLOW_CREDENTIALS = True
 
 ```mermaid
 flowchart TD
-    A["User visits /register"] --> B["Fill form:<br/>Username, Email, Password,<br/>First Name, Last Name"]
-    B --> C{"Form valid?"}
-    C -->|No| D["Show error message"]
+    A["User visits /register"] --> B["Step 1: Basic Info<br/>Name, Username, Email, Password"]
+    B --> C{"Fields valid?"}
+    C -->|No| D["Show error"]
     D --> B
-    C -->|Yes| E["POST /api/users/<br/>Create user account"]
-    E --> F{"Account created?<br/>(Status 201)"}
-    F -->|No| G["Show: Username taken"]
-    G --> B
-    F -->|Yes| H["Auto-login:<br/>POST /api/token/"]
-    H --> I["Store JWT tokens<br/>in localStorage"]
-    I --> J["Redirect to Home /"]
+    C -->|Yes| E["Step 2: Date of Birth<br/>Must be 20+ years old"]
+    E --> F{"Age >= 20?"}
+    F -->|No| G["Show: Must be 20+"]
+    G --> E
+    F -->|Yes| H["Step 3: Safety Acts<br/>Accept all 6 Philippine laws"]
+    H --> I{"All accepted?"}
+    I -->|No| J["Show: Must accept all"]
+    J --> H
+    I -->|Yes| K["POST /api/register/<br/>Create account"]
+    K --> L{"Account created?"}
+    L -->|No| M["Show: Username/Email taken"]
+    M --> B
+    L -->|Yes| N["Step 4: ID Upload<br/>Optional OCR scan"]
+    N --> O{"Upload ID?"}
+    O -->|Yes| P["POST /api/upload-id/<br/>Status → PENDING"]
+    O -->|Skip| Q["Redirect to /login"]
+    P --> Q
 
-    K["User visits /login"] --> L["Enter Username + Password"]
-    L --> M["POST /api/token/"]
-    M --> N{"Credentials valid?"}
-    N -->|No| O["Show: Invalid credentials"]
-    O --> L
-    N -->|Yes| I
+    R["User visits /login"] --> S["Enter Username + Password"]
+    S --> T["POST /api/token/"]
+    T --> U{"Valid?"}
+    U -->|No| V["Show: Invalid credentials"]
+    V --> S
+    U -->|Yes| W["Store JWT tokens"]
+    W --> X["Redirect to Home /"]
 ```
 
 ### 12.2 Rent Request Flow
@@ -748,17 +930,21 @@ npm run dev
 
 The **Kanojo (RentCebu)** application is a complete, production-ready full-stack web platform that demonstrates mastery of modern web development practices:
 
-- **Frontend Excellence:** React 19 SPA with component-based architecture, context-based state management, and responsive design with glassmorphism aesthetics
-- **Backend Robustness:** Django 6 REST API with proper serialization, permission-based access control, and auto-calculated business logic
-- **Real-Time Capabilities:** WebSocket-powered anonymous chat with intelligent matchmaking via Django Channels
-- **Security First:** JWT authentication, password hashing, CORS protection, CSRF middleware, owner-only authorization checks, and environment-based secret management
-- **Deployment Ready:** Fully containerized with Docker, deployable to Render, Railway, or any cloud platform with PostgreSQL support
-- **Data-Driven:** Comprehensive seed system populating 35+ realistic profiles with images across 6+ Cebu locations
+- **Frontend Excellence:** React 19 SPA with monochrome design system, 4-step registration, DM inbox with reactions/read receipts, and responsive 4-column/3-column layouts
+- **Backend Robustness:** Django 6 REST API with 25+ endpoints, proper serialization, permission-based access control, and auto-calculated business logic
+- **Real-Time Capabilities:** WebSocket-powered anonymous chat with intelligent matchmaking, plus polling-based direct messaging
+- **Legal Compliance:** 6 Philippine safety acts (RA 9208, RA 10173, RA 9262, RA 7610, RA 10175, RA 9995) with timestamped consent and IP logging
+- **Identity Verification:** Client-side OCR via Tesseract.js with admin review workflow
+- **Social Features:** Star-based reviews (1-5), direct messaging with emoji reactions, unread badges
+- **Security First:** JWT authentication, age verification (20+), ID encryption, self-review prevention, conversation authorization, and environment-based secret management
+- **Cloud-Native:** Supabase PostgreSQL database, fully containerized with Docker, deployable to Render, Railway, or any cloud platform
+- **Data-Driven:** Comprehensive seed system populating 64 realistic profiles with images across 6+ Cebu locations
 
-The system successfully adapts a proven Japanese business model for the Philippine market, providing a safe, user-friendly platform for social companion services in Cebu City.
+The system successfully adapts a proven Japanese business model for the Philippine market, providing a safe, legally compliant, user-friendly platform for social companion services in Cebu City.
 
 ---
 
 > **Developed by:** Singson, John Rey  
 > **Stack:** Django 6 · React 19 · Vite · PostgreSQL · Docker  
 > **Status:** ✅ Deployed & Production-Ready
+> **Institution:** Cebu Eastern College Inc.

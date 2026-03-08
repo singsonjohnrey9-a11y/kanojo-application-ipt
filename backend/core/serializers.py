@@ -1,49 +1,212 @@
 from rest_framework import serializers
-from .models import User, Profile, RentRequest, ChatRoom, Message
+from .models import (
+    User, Profile, RentRequest, ChatRoom, Message,
+    LegalAgreement, PHILIPPINE_SAFETY_ACTS,
+    Conversation, DirectMessage, MessageReaction, Review,
+)
+
 
 class UserSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
+    password = serializers.CharField(write_only=True, required=True)
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'password', 'is_rentable']
+        fields = [
+            'id', 'username', 'email', 'first_name', 'last_name',
+            'password', 'is_rentable', 'date_of_birth',
+            'verification_status', 'legal_agreements_accepted',
+        ]
+        read_only_fields = ['verification_status', 'legal_agreements_accepted']
 
     def create(self, validated_data):
-        user = User.objects.create_user(
-            username=validated_data['username'],
-            email=validated_data.get('email', ''),
-            password=validated_data['password'],
-            first_name=validated_data.get('first_name', ''),
-            last_name=validated_data.get('last_name', ''),
-            is_rentable=validated_data.get('is_rentable', False)
-        )
+        password = validated_data.pop('password')
+        user = User(**validated_data)
+        user.set_password(password)
+        user.save()
         return user
+
+
+class UserMiniSerializer(serializers.ModelSerializer):
+    """Lightweight user serializer for DM/review contexts."""
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'first_name', 'last_name']
+
 
 class ProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
-    
+    average_rating = serializers.SerializerMethodField()
+    review_count = serializers.SerializerMethodField()
+
     class Meta:
         model = Profile
-        fields = ['id', 'user', 'bio', 'hourly_rate', 'rank', 'location', 'image']
+        fields = '__all__'
+
+    def get_average_rating(self, obj):
+        reviews = obj.reviews.all()
+        if not reviews:
+            return 0
+        return round(sum(r.rating for r in reviews) / len(reviews), 1)
+
+    def get_review_count(self, obj):
+        return obj.reviews.count()
+
 
 class RentRequestSerializer(serializers.ModelSerializer):
-    client = UserSerializer(read_only=True)
-    profile_id = serializers.PrimaryKeyRelatedField(
-        queryset=Profile.objects.all(), source='profile', write_only=True
-    )
-    profile = ProfileSerializer(read_only=True)
-
     class Meta:
         model = RentRequest
-        fields = ['id', 'client', 'profile', 'profile_id', 'hours', 'status', 'created_at', 'scheduled_time', 'total_cost']
-        read_only_fields = ['total_cost', 'status', 'created_at']
+        fields = '__all__'
+
 
 class ChatRoomSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChatRoom
         fields = '__all__'
 
+
 class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
         fields = '__all__'
+
+
+class LegalAgreementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LegalAgreement
+        fields = ['id', 'act_code', 'act_title', 'accepted_at']
+        read_only_fields = ['accepted_at']
+
+
+class LegalActSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    title = serializers.CharField()
+    description = serializers.CharField()
+
+
+class RegistrationSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=150)
+    password = serializers.CharField(write_only=True)
+    email = serializers.EmailField()
+    first_name = serializers.CharField(max_length=150)
+    last_name = serializers.CharField(max_length=150)
+    date_of_birth = serializers.DateField()
+    accepted_acts = serializers.ListField(
+        child=serializers.CharField(), min_length=6
+    )
+
+    def validate_date_of_birth(self, value):
+        from datetime import date
+        today = date.today()
+        age = today.year - value.year - (
+            (today.month, today.day) < (value.month, value.day)
+        )
+        if age < 20:
+            raise serializers.ValidationError(
+                'You must be at least 20 years old to register.'
+            )
+        return value
+
+    def validate_accepted_acts(self, value):
+        required_codes = {act['code'] for act in PHILIPPINE_SAFETY_ACTS}
+        missing = required_codes - set(value)
+        if missing:
+            raise serializers.ValidationError(
+                f'Missing: {", ".join(missing)}'
+            )
+        return value
+
+    def validate_username(self, value):
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError('This username is already taken.')
+        return value
+
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError('This email address is already registered.')
+        return value
+
+
+class IDUploadSerializer(serializers.Serializer):
+    id_front = serializers.ImageField()
+    id_back = serializers.ImageField(required=False)
+    ocr_extracted_name = serializers.CharField(max_length=255, required=False, default='')
+    ocr_extracted_dob = serializers.CharField(max_length=100, required=False, default='')
+    ocr_confidence = serializers.FloatField(required=False, default=0.0)
+
+
+class VerificationReviewSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=['approve', 'reject'])
+    note = serializers.CharField(required=False, default='')
+
+
+# ──── Phase 5: DM Serializers ────
+
+
+class MessageReactionSerializer(serializers.ModelSerializer):
+    user = UserMiniSerializer(read_only=True)
+
+    class Meta:
+        model = MessageReaction
+        fields = ['id', 'user', 'reaction_type', 'created_at']
+        read_only_fields = ['created_at']
+
+
+class DirectMessageSerializer(serializers.ModelSerializer):
+    sender = UserMiniSerializer(read_only=True)
+    reactions = MessageReactionSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = DirectMessage
+        fields = [
+            'id', 'conversation', 'sender', 'content', 'image',
+            'timestamp', 'is_read', 'reactions',
+        ]
+        read_only_fields = ['timestamp', 'is_read']
+
+
+class ConversationSerializer(serializers.ModelSerializer):
+    user1 = UserMiniSerializer(read_only=True)
+    user2 = UserMiniSerializer(read_only=True)
+    last_message = serializers.SerializerMethodField()
+    unread_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Conversation
+        fields = [
+            'id', 'user1', 'user2', 'created_at', 'updated_at',
+            'last_message', 'unread_count',
+        ]
+
+    def get_last_message(self, obj):
+        msg = obj.messages.order_by('-timestamp').first()
+        if msg:
+            return {
+                'content': msg.content[:100],
+                'sender_id': msg.sender_id,
+                'timestamp': msg.timestamp.isoformat(),
+                'is_read': msg.is_read,
+            }
+        return None
+
+    def get_unread_count(self, obj):
+        request = self.context.get('request')
+        if request and request.user:
+            return obj.messages.filter(is_read=False).exclude(sender=request.user).count()
+        return 0
+
+
+# ──── Phase 6: Review Serializers ────
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+    reviewer = UserMiniSerializer(read_only=True)
+
+    class Meta:
+        model = Review
+        fields = ['id', 'reviewer', 'profile', 'rating', 'comment', 'created_at']
+        read_only_fields = ['created_at']
+
+    def validate_rating(self, value):
+        if value < 1 or value > 5:
+            raise serializers.ValidationError('Rating must be between 1 and 5.')
+        return value

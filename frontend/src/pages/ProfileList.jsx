@@ -1,16 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../api/config';
-import { Heart, Sparkles } from 'lucide-react';
+import { Heart, Sparkles, Globe, Languages, CheckCircle, Star, MapPin } from 'lucide-react';
 
-// Fix image URLs: prepend API base URL for relative paths, ensure https
+// Fix image URLs: prepend API base URL for relative paths
+// Only force https in production (when window.location is https)
 const API_BASE = import.meta.env.VITE_API_URL || '';
 const fixImageUrl = (url) => {
     if (!url) return null;
     if (url.startsWith('/')) {
         url = API_BASE + url;
     }
-    return url.replace(/^http:\/\//, 'https://');
+    if (window.location.protocol === 'https:') {
+        url = url.replace(/^http:\/\//, 'https://');
+    }
+    return url;
 };
 
 const RANK_COLORS = {
@@ -30,16 +34,37 @@ const RANK_LABELS = {
 const getInitials = (name) =>
     name.split(/[\s_]+/).map(w => w[0]).join('').toUpperCase().slice(0, 2);
 
-// Random ages for display (seeded by profile id for consistency)
 const getAge = (id) => 20 + (id % 13);
+
+// Star rating based on rank
+const RANK_STARS = {
+    BRONZE: 3,
+    SILVER: 4,
+    GOLD: 4,
+    PLATINUM: 5,
+};
+
+/* Star Rating Component */
+const StarRating = ({ count }) => (
+    <div style={{ display: 'flex', gap: '1px', alignItems: 'center' }}>
+        {Array.from({ length: 5 }).map((_, i) => (
+            <Star
+                key={i}
+                size={12}
+                fill={i < count ? '#1a1a1a' : 'none'}
+                color={i < count ? '#1a1a1a' : '#ccc'}
+                strokeWidth={1.5}
+            />
+        ))}
+    </div>
+);
 
 /* Skeleton Card for Loading */
 const SkeletonCard = () => (
     <div className="skeleton-card">
-        <div className="skeleton skeleton-img" style={{ height: '220px' }} />
+        <div className="skeleton skeleton-img" style={{ height: '280px' }} />
         <div className="skeleton skeleton-text" />
         <div className="skeleton skeleton-text short" />
-        <div className="skeleton skeleton-btn" />
     </div>
 );
 
@@ -74,7 +99,7 @@ export const ProfileList = () => {
     }
 
     return (
-        <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2rem 1.5rem 4rem' }}>
+        <div style={{ maxWidth: '1120px', margin: '0 auto', padding: '2rem 1.5rem 4rem' }}>
             {/* Page Header */}
             <div className="animate-fade-in-up" style={{ marginBottom: '1.5rem' }}>
                 <h1 style={{
@@ -92,7 +117,7 @@ export const ProfileList = () => {
             {/* Loading Skeleton */}
             {loading && (
                 <div className="profile-grid">
-                    {Array.from({ length: 9 }).map((_, i) => <SkeletonCard key={i} />)}
+                    {Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)}
                 </div>
             )}
 
@@ -107,7 +132,7 @@ export const ProfileList = () => {
                 </div>
             )}
 
-            {/* Profile Cards — flat grid, no location grouping */}
+            {/* Profile Cards */}
             {!loading && displayedProfiles.length > 0 && (
                 <div className="profile-grid">
                     {displayedProfiles.map((profile, index) => {
@@ -120,6 +145,7 @@ export const ProfileList = () => {
                             : profile.user?.username || 'Unknown';
                         const age = getAge(profile.id);
                         const city = profile.location.split(',')[0];
+                        const starCount = RANK_STARS[profile.rank] || 3;
 
                         return (
                             <div
@@ -133,7 +159,7 @@ export const ProfileList = () => {
                                     <div className={`ribbon ${ribbonClass}`}>{ribbonLabel}</div>
                                 </div>
 
-                                {/* Photo */}
+                                {/* Photo — portrait showcase */}
                                 <div className="profile-card-photo">
                                     {profile.image ? (
                                         <img
@@ -157,14 +183,13 @@ export const ProfileList = () => {
 
                                 {/* Info */}
                                 <div className="profile-card-info">
-                                    {/* Name with age */}
+                                    {/* Name with age — like rent-kano style */}
                                     <div className="profile-card-name">
-                                        {firstName}({age}){lastName}
+                                        {firstName}({age})
                                     </div>
 
-                                    {/* Location + NEW badges */}
+                                    {/* NEW badge */}
                                     <div className="profile-badges">
-                                        <span className="location-badge">{city}</span>
                                         <span className="new-badge">NEW</span>
                                     </div>
 
@@ -173,16 +198,21 @@ export const ProfileList = () => {
                                         {profile.bio || 'No bio available.'}
                                     </div>
 
-                                    {/* Bottom icons */}
+                                    {/* Star Rating + Icons — desktop only */}
                                     <div className="profile-card-icons">
-                                        <span title="Filipino">🇵🇭</span>
-                                        <span title="English">🇺🇸</span>
+                                        <StarRating count={starCount} />
                                         <span style={{
-                                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                            width: '18px', height: '18px', borderRadius: '3px',
-                                            backgroundColor: '#4caf50', color: '#fff',
-                                            fontSize: '0.55rem', fontWeight: '800',
-                                        }} title="Available">OK</span>
+                                            marginLeft: 'auto',
+                                            display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
+                                            fontSize: '0.7rem', fontWeight: '600', color: 'var(--text-muted)',
+                                        }}>
+                                            <MapPin size={11} /> {city}
+                                        </span>
+                                    </div>
+
+                                    {/* Star Rating — mobile only (icons row hidden, this shows) */}
+                                    <div className="profile-card-stars-mobile">
+                                        <StarRating count={starCount} />
                                     </div>
                                 </div>
                             </div>

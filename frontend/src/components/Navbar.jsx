@@ -1,12 +1,14 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { Gift, Heart, MessageCircle, X, LogOut } from 'lucide-react';
+import { Gift, Heart, MessageCircle, Mail, X, LogOut } from 'lucide-react';
+import api from '../api/config';
 
 export const Navbar = () => {
     const { user, logoutUser } = useContext(AuthContext);
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
     const location = useLocation();
 
     useEffect(() => {
@@ -18,11 +20,26 @@ export const Navbar = () => {
     // Close drawer on route change
     useEffect(() => { setDrawerOpen(false); }, [location]);
 
+    // Poll unread DM count
+    useEffect(() => {
+        if (!user) return;
+        const token = localStorage.getItem('access');
+        const fetchUnread = () => {
+            api.get('/api/messages/unread/', { headers: { Authorization: `Bearer ${token}` } })
+                .then(res => setUnreadCount(res.data.unread_count || 0))
+                .catch(() => { });
+        };
+        fetchUnread();
+        const interval = setInterval(fetchUnread, 10000);
+        return () => clearInterval(interval);
+    }, [user]);
+
     const isActive = (path) => location.pathname === path;
 
     const navLinks = [
         { to: '/profiles', label: 'Cast List', icon: <Heart size={15} /> },
         { to: '/chat', label: 'Chat', icon: <MessageCircle size={15} /> },
+        { to: '/inbox', label: 'Messages', icon: <Mail size={15} />, badge: unreadCount },
     ];
 
     return (
@@ -44,8 +61,19 @@ export const Navbar = () => {
                                 borderBottom: isActive(link.to) ? '2px solid var(--accent-primary)' : '2px solid transparent',
                                 paddingBottom: '2px',
                                 transition: 'all 150ms ease',
+                                position: 'relative',
                             }}>
                                 {link.icon} {link.label}
+                                {link.badge > 0 && (
+                                    <span style={{
+                                        background: '#c42b2b', color: '#fff',
+                                        borderRadius: '50%', minWidth: '16px', height: '16px',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontSize: '0.55rem', fontWeight: '700',
+                                    }}>
+                                        {link.badge}
+                                    </span>
+                                )}
                             </Link>
                         ))}
 
@@ -55,7 +83,7 @@ export const Navbar = () => {
                             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
                                 <div style={{
                                     width: '30px', height: '30px', borderRadius: '50%',
-                                    background: 'linear-gradient(135deg, var(--accent-primary), #ff6b9d)',
+                                    background: 'linear-gradient(135deg, #1a1a1a, #555555)',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     color: 'white', fontSize: '0.7rem', fontWeight: '700',
                                 }}>

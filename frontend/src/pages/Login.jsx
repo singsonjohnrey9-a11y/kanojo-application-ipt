@@ -1,11 +1,12 @@
 import React, { useState, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
-import { Gift, Frown, Sparkles, Lock, User } from 'lucide-react';
+import { Gift, AlertCircle, Sparkles, Lock, User, Eye, EyeOff } from 'lucide-react';
 
 export const Login = () => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const { loginUser } = useContext(AuthContext);
@@ -47,7 +48,7 @@ export const Login = () => {
                         marginBottom: '1.25rem', fontSize: '0.82rem', textAlign: 'center',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem',
                     }}>
-                        <Frown size={14} /> {error}
+                        <AlertCircle size={14} /> {error}
                     </div>
                 )}
 
@@ -56,13 +57,37 @@ export const Login = () => {
                         <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.4rem', fontWeight: '600', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
                             <User size={14} /> Username
                         </label>
-                        <input type="text" className="input-field" value={username} onChange={(e) => setUsername(e.target.value)} required />
+                        <input type="text" className="input-field" value={username} onChange={(e) => setUsername(e.target.value)} required placeholder="Enter your username" />
                     </div>
                     <div>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.4rem', fontWeight: '600', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
                             <Lock size={14} /> Password
                         </label>
-                        <input type="password" className="input-field" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                        <div style={{ position: 'relative' }}>
+                            <input
+                                type={showPassword ? 'text' : 'password'}
+                                className="input-field"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                                placeholder="Enter your password"
+                                style={{ paddingRight: '2.5rem' }}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                style={{
+                                    position: 'absolute', right: '0.75rem', top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    background: 'none', border: 'none', cursor: 'pointer',
+                                    color: 'var(--text-muted)', padding: '0.25rem',
+                                    display: 'flex', alignItems: 'center',
+                                }}
+                                title={showPassword ? 'Hide password' : 'Show password'}
+                            >
+                                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
+                        </div>
                     </div>
                     <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem', padding: '0.75rem' }} disabled={loading}>
                         {loading ? <><div className="spinner" /> Logging in...</> : <><Sparkles size={16} /> Login</>}

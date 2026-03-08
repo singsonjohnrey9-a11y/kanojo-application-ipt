@@ -8,6 +8,8 @@ import { Heart, Sparkles, Mail, MapPin, Gift, Users, Clock, Shield } from 'lucid
 import { AuthProvider } from './context/AuthContext';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
+import { AdminVerification } from './pages/AdminVerification';
+import { Inbox } from './pages/Inbox';
 
 /* ─── Home Hero ─── */
 const Home = () => (
@@ -47,7 +49,7 @@ const Home = () => (
       animationDelay: '0.35s', flexWrap: 'wrap', justifyContent: 'center',
     }}>
       {[
-        { icon: <Users size={20} />, value: '15+', label: 'Cast Members' },
+        { icon: <Users size={20} />, value: '60+', label: 'Cast Members' },
         { icon: <MapPin size={20} />, value: '6', label: 'Cebu Areas' },
         { icon: <Clock size={20} />, value: '24/7', label: 'Availability' },
         { icon: <Shield size={20} />, value: '100%', label: 'Verified' },
@@ -111,6 +113,8 @@ function App() {
             <Route path="/chat" element={<AnonymousChat />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/admin/verifications" element={<AdminVerification />} />
+            <Route path="/inbox" element={<Inbox />} />
           </Routes>
         </main>
 
