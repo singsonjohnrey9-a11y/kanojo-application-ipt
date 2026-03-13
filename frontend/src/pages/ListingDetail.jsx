@@ -7,7 +7,7 @@ import { AuthContext } from '../context/AuthContext';
 import {
     MapPin, Bed, Bath, Users, Home, Building, Building2, DoorOpen,
     Star, ArrowLeft, MessageCircle, Calendar, CheckCircle, Maximize,
-    Shirt,
+    Shirt, Send, Wifi, Car, Shield, Waves, Dumbbell, Wind, ChefHat
 } from 'lucide-react';
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || 'pk.eyJ1IjoiZHVtbXkiLCJhIjoiZHVtbXkifQ.dummy';
