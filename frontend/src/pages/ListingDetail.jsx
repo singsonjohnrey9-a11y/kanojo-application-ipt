@@ -31,7 +31,13 @@ const AMENITY_ICONS = {
 
 const fixImageUrl = (url) => {
     if (!url) return null;
-    if (url.startsWith('http')) return url;
+
+    // Handle AWS S3 URLs correctly: Django storage might return absolute URLs
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+        return url;
+    }
+
+    // Default development fallback for local storage (Relative URLs)
     const apiUrl = import.meta.env.VITE_API_URL || '';
     return `${apiUrl}${url.startsWith('/') ? '' : '/'}${url}`;
 };

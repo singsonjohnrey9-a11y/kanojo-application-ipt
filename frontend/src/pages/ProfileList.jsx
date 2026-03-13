@@ -8,6 +8,12 @@ import { Heart, Sparkles, Globe, Languages, CheckCircle, Star, MapPin } from 'lu
 const API_BASE = import.meta.env.VITE_API_URL || '';
 const fixImageUrl = (url) => {
     if (!url) return null;
+    
+    // Support absolute AWS S3 urls
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+        return url;
+    }
+
     if (url.startsWith('/')) {
         url = API_BASE + url;
     }

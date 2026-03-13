@@ -35,15 +35,12 @@ const formatPrice = (price) => {
 const fixImageUrl = (url) => {
     if (!url) return null;
 
-    // If Django prepended /media/ to an absolute URL, strip it
-    if (url.includes('/media/http')) {
-        return url.split('/media/')[1].replace('https%3A/', 'https://').replace('http%3A/', 'http://');
+    // Handle absolute AWS S3 URLs properly (e.g., when AWS_S3_ENDPOINT_URL is used)
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+        return url;
     }
 
-    // If it's already a clean absolute URL, return it
-    if (url.startsWith('http')) return url;
-
-    // Otherwise, prepend the API URL for local dev images
+    // Fallback for local development if django isn't using S3 and just returns a relative /media path
     const apiUrl = import.meta.env.VITE_API_URL || '';
     return `${apiUrl}${url.startsWith('/') ? '' : '/'}${url}`;
 };
