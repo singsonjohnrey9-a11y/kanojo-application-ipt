@@ -116,10 +116,10 @@ export const AnonymousChat = () => {
         <div className="container animate-fade-in-up" style={{ padding: '2rem 1.5rem', maxWidth: '720px' }}>
             <div style={{ marginBottom: '1.5rem' }}>
                 <h1 style={{ fontSize: '1.5rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <MessageCircle size={22} color="var(--accent-primary)" /> Anonymous Chat
+                    <MessageCircle size={22} color="var(--accent-primary)" /> Community Chat
                 </h1>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                    Get matched with a random stranger near you.
+                    Connect with other locals, landlords, and tenants in the area.
                 </p>
             </div>
 
@@ -134,7 +134,7 @@ export const AnonymousChat = () => {
                     }}>
                         <Radio size={28} color="var(--accent-primary)" />
                     </div>
-                    <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Find a Connection</h2>
+                    <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Find a Chat Partner</h2>
                     <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '0.85rem', maxWidth: '320px', margin: '0 auto 2rem' }}>
                         You'll be matched with a random anonymous user for a private conversation.
                     </p>

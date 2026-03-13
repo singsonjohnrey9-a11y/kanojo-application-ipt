@@ -1,7 +1,7 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { Gift, Heart, MessageCircle, Mail, X, LogOut } from 'lucide-react';
+import { Heart, MessageCircle, Mail, X, LogOut, Building2, Home } from 'lucide-react';
 import api from '../api/config';
 
 export const Navbar = () => {
@@ -37,10 +37,13 @@ export const Navbar = () => {
     const isActive = (path) => location.pathname === path;
 
     const navLinks = [
-        { to: '/profiles', label: 'Cast List', icon: <Heart size={15} /> },
-        { to: '/chat', label: 'Chat', icon: <MessageCircle size={15} /> },
+        { to: '/', label: 'Browse Listings', icon: <Home size={15} /> },
         { to: '/inbox', label: 'Messages', icon: <Mail size={15} />, badge: unreadCount },
     ];
+
+    if (user) {
+        navLinks.push({ to: '/dashboard', label: 'My Properties', icon: <Building2 size={15} /> });
+    }
 
     return (
         <>
@@ -48,7 +51,7 @@ export const Navbar = () => {
                 <div className="container flex-between">
                     {/* Logo */}
                     <Link to="/" style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <Gift size={22} /> RentCebu
+                        <Building2 size={22} /> Ubecahan
                     </Link>
 
                     {/* Desktop Nav */}
@@ -115,7 +118,7 @@ export const Navbar = () => {
             <div className={`mobile-drawer${drawerOpen ? ' open' : ''}`}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                     <span style={{ fontWeight: '800', color: 'var(--accent-primary)', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <Gift size={20} /> RentCebu
+                        <Building2 size={20} /> Ubecahan
                     </span>
                     <button onClick={() => setDrawerOpen(false)} style={{ color: 'var(--text-muted)' }}>
                         <X size={22} />

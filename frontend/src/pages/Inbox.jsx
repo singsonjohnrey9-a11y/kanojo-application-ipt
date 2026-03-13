@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import {
     MessageCircle, Send, ArrowLeft, Image, ThumbsUp, Heart,
     Laugh, Flame, Frown, Loader2, User, Search, Check, CheckCheck,
+    Building2,
 } from 'lucide-react';
 import { AuthContext } from '../context/AuthContext';
 import api from '../api/config';
@@ -23,19 +24,20 @@ const authHeaders = () => ({ Authorization: `Bearer ${getToken()}` });
 export const Inbox = () => {
     const { user } = useContext(AuthContext);
     const navigate = useNavigate();
+    const location = useLocation();
     const [searchParams] = useSearchParams();
     const [conversations, setConversations] = useState([]);
     const [selectedConvo, setSelectedConvo] = useState(null);
     const [messages, setMessages] = useState([]);
-    const [newMsg, setNewMsg] = useState('');
+    const [newMsg, setNewMsg] = useState(location.state?.prefillMsg || '');
     const [loading, setLoading] = useState(true);
     const [msgLoading, setMsgLoading] = useState(false);
     const [sending, setSending] = useState(false);
     const messagesEndRef = useRef(null);
     const pollRef = useRef(null);
 
-    // Auto-open conversation from URL param
-    const targetUserId = searchParams.get('user');
+    // Auto-open conversation from URL param or state routing
+    const targetUserId = searchParams.get('user') || location.state?.landlordId;
 
     useEffect(() => {
         fetchConversations();
@@ -274,23 +276,46 @@ export const Inbox = () => {
                         {/* Thread Header */}
                         <div style={{
                             padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-color)',
-                            display: 'flex', alignItems: 'center', gap: '0.5rem',
+                            display: 'flex', flexDirection: 'column',
                         }}>
-                            <button onClick={() => setSelectedConvo(null)}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '0.25rem' }}>
-                                <ArrowLeft size={20} />
-                            </button>
-                            <div style={{
-                                width: '32px', height: '32px', borderRadius: '50%',
-                                background: 'linear-gradient(135deg, #1a1a1a, #555)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                color: '#fff', fontWeight: '700', fontSize: '0.7rem',
-                            }}>
-                                {(getOtherUser(selectedConvo).first_name || 'U')[0].toUpperCase()}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <button onClick={() => setSelectedConvo(null)}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '0.25rem' }}>
+                                    <ArrowLeft size={20} />
+                                </button>
+                                <div style={{
+                                    width: '32px', height: '32px', borderRadius: '50%',
+                                    background: 'linear-gradient(135deg, #1a1a1a, #555)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    color: '#fff', fontWeight: '700', fontSize: '0.7rem',
+                                }}>
+                                    {(getOtherUser(selectedConvo).first_name || 'U')[0].toUpperCase()}
+                                </div>
+                                <span style={{ fontWeight: '700', fontSize: '0.9rem' }}>
+                                    {getOtherUser(selectedConvo).first_name} {getOtherUser(selectedConvo).last_name}
+                                </span>
                             </div>
-                            <span style={{ fontWeight: '700', fontSize: '0.9rem' }}>
-                                {getOtherUser(selectedConvo).first_name} {getOtherUser(selectedConvo).last_name}
-                            </span>
+
+                            {selectedConvo.listing_info && (
+                                <div style={{
+                                    marginTop: '0.75rem', padding: '0.5rem', background: 'var(--bg-secondary)',
+                                    borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '0.75rem',
+                                    cursor: 'pointer', border: '1px solid var(--border-color)'
+                                }} onClick={() => navigate(`/listing/${selectedConvo.listing_info.id}`)}>
+                                    {selectedConvo.listing_info.image ? (
+                                        <img src={selectedConvo.listing_info.image.startsWith('/') ? API_BASE + selectedConvo.listing_info.image : selectedConvo.listing_info.image} alt="Property" style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '4px' }} />
+                                    ) : (
+                                        <div style={{ width: '48px', height: '48px', background: 'var(--border-color)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <Building2 size={20} color="var(--text-muted)" />
+                                        </div>
+                                    )}
+                                    <div style={{ flex: 1 }}>
+                                        <h4 style={{ fontSize: '0.85rem', margin: 0, fontWeight: '700', color: 'var(--text-primary)' }}>{selectedConvo.listing_info.title}</h4>
+                                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>₱{selectedConvo.listing_info.price}/mo • {selectedConvo.listing_info.property_type}</p>
+                                    </div>
+                                    <ArrowLeft size={16} strokeWidth={2} style={{ transform: 'rotate(135deg)', color: 'var(--text-muted)' }} />
+                                </div>
+                            )}
                         </div>
 
                         {/* Messages */}

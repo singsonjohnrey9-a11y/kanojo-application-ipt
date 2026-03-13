@@ -3,10 +3,10 @@ from django.contrib.auth.models import AbstractUser
 
 
 class User(AbstractUser):
-    # Custom users can be either regular clients or rentable profiles
-    is_rentable = models.BooleanField(default=False)
+    # is_landlord replaces is_rentable — distinguishes landlords from tenants
+    is_landlord = models.BooleanField(default=False)
 
-    # Phase 2+3: Verification & Safety
+    # Verification & Safety
     date_of_birth = models.DateField(blank=True, null=True)
     VERIFICATION_CHOICES = (
         ('UNVERIFIED', 'Unverified'),
@@ -25,13 +25,14 @@ class User(AbstractUser):
     legal_agreements_accepted = models.BooleanField(default=False)
     legal_accepted_at = models.DateTimeField(blank=True, null=True)
     verification_note = models.TextField(blank=True, default='')
+    phone_number = models.CharField(max_length=20, blank=True, default='')
 
     def __str__(self):
         return self.username
 
     @property
     def is_age_verified(self):
-        """Check if user is 20 or older."""
+        """Check if user is 18 or older."""
         if not self.date_of_birth:
             return False
         from datetime import date
@@ -39,22 +40,11 @@ class User(AbstractUser):
         age = today.year - self.date_of_birth.year - (
             (today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day)
         )
-        return age >= 20
+        return age >= 18
 
 
 # Philippine safety laws that users must agree to
 PHILIPPINE_SAFETY_ACTS = [
-    {
-        'code': 'RA9208',
-        'title': 'Anti-Trafficking in Persons Act of 2003',
-        'description': (
-            'Republic Act No. 9208 criminalizes trafficking in persons, '
-            'including recruitment, transportation, or harboring of persons '
-            'by means of threat, force, or coercion for the purpose of exploitation. '
-            'All users and companions must acknowledge they are engaging in '
-            'legitimate, consensual companionship services only.'
-        ),
-    },
     {
         'code': 'RA10173',
         'title': 'Data Privacy Act of 2012',
@@ -66,22 +56,32 @@ PHILIPPINE_SAFETY_ACTS = [
         ),
     },
     {
-        'code': 'RA9262',
-        'title': 'Anti-Violence Against Women and Children Act',
+        'code': 'RA9653',
+        'title': 'Rent Control Act of 2009',
         'description': (
-            'Republic Act No. 9262 protects women and children from violence, '
-            'threats, stalking, and harassment. Any form of abuse, coercion, '
-            'or intimidation toward companions will result in immediate account '
-            'termination and legal action.'
+            'Republic Act No. 9653 protects residential tenants by regulating '
+            'rental increases, security deposits, and eviction processes for '
+            'residential units with monthly rent not exceeding a certain threshold. '
+            'All landlords must comply with these provisions.'
         ),
     },
     {
-        'code': 'RA7610',
-        'title': 'Special Protection of Children Against Abuse',
+        'code': 'RA9514',
+        'title': 'Fire Code of the Philippines of 2008',
         'description': (
-            'Republic Act No. 7610 provides protection for children against abuse '
-            'and exploitation. All users must be at least 20 years of age. '
-            'Government-issued ID verification is required for all accounts.'
+            'Republic Act No. 9514 mandates fire safety compliance for all '
+            'residential and commercial properties. Landlords must ensure all '
+            'listed properties meet fire safety standards and have valid fire '
+            'safety inspection certificates.'
+        ),
+    },
+    {
+        'code': 'RA7279',
+        'title': 'Urban Development and Housing Act of 1992',
+        'description': (
+            'Republic Act No. 7279 provides for a comprehensive and continuing '
+            'urban development and housing program. It protects tenants from '
+            'illegal demolitions and ensures access to affordable housing.'
         ),
     },
     {
@@ -94,22 +94,22 @@ PHILIPPINE_SAFETY_ACTS = [
         ),
     },
     {
-        'code': 'RA9995',
-        'title': 'Anti-Photo and Video Voyeurism Act of 2009',
+        'code': 'RA386',
+        'title': 'Civil Code of the Philippines — Lease Provisions',
         'description': (
-            'Republic Act No. 9995 prohibits the unauthorized recording, '
-            'reproduction, or sharing of intimate images or videos. '
-            'Recording or photographing companions without explicit consent '
-            'is strictly prohibited and will result in legal prosecution.'
+            'Articles 1654-1688 of the Civil Code govern lease contracts in the '
+            'Philippines. Both landlords and tenants must uphold their obligations '
+            'under the lease agreement, including proper notice for termination '
+            'and maintenance of the property.'
         ),
     },
 ]
 
 
 class LegalAgreement(models.Model):
-    """Tracks which safety acts a user has agreed to."""
+    """Tracks which safety/rental acts a user has agreed to."""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='legal_agreements')
-    act_code = models.CharField(max_length=20)  # e.g. 'RA9208'
+    act_code = models.CharField(max_length=20)
     act_title = models.CharField(max_length=255)
     accepted_at = models.DateTimeField(auto_now_add=True)
     ip_address = models.GenericIPAddressField(blank=True, null=True)
@@ -122,26 +122,53 @@ class LegalAgreement(models.Model):
         return f"{self.user.username} accepted {self.act_code}"
 
 
-class Profile(models.Model):
-    RANK_CHOICES = (
-        ('BRONZE', 'Bronze'),
-        ('SILVER', 'Silver'),
-        ('GOLD', 'Gold'),
-        ('PLATINUM', 'Platinum'),
+class Listing(models.Model):
+    """A property listing — house, boarding house, apartment, condo, or room for rent."""
+    PROPERTY_TYPE_CHOICES = (
+        ('HOUSE', 'House'),
+        ('BOARDING_HOUSE', 'Boarding House'),
+        ('APARTMENT', 'Apartment'),
+        ('CONDO', 'Condo'),
+        ('ROOM', 'Room'),
     )
 
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
-    bio = models.TextField(blank=True, null=True)
-    hourly_rate = models.DecimalField(max_digits=10, decimal_places=2, default=500.00)
-    rank = models.CharField(max_length=20, choices=RANK_CHOICES, default='BRONZE')
-    location = models.CharField(max_length=255, default='Cebu City, Philippines')
-    image = models.ImageField(upload_to='profiles/', blank=True, null=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='listings')
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default='')
+    property_type = models.CharField(max_length=20, choices=PROPERTY_TYPE_CHOICES, default='HOUSE')
+    monthly_rent = models.DecimalField(max_digits=10, decimal_places=2, default=5000.00)
+    bedrooms = models.PositiveIntegerField(default=1)
+    bathrooms = models.PositiveIntegerField(default=1)
+    area_sqm = models.FloatField(default=0.0, blank=True)
+    max_occupants = models.PositiveIntegerField(default=1)
+
+    # Location
+    address = models.TextField(default='Cebu City, Philippines')
+    location = models.CharField(max_length=255, default='Cebu City')
+    house_rules = models.TextField(blank=True, default='') # Added for restrictions (pets, curfew, etc)
+    latitude = models.FloatField(default=10.3157)   # Cebu City default
+    longitude = models.FloatField(default=123.8854)  # Cebu City default
+
+    # Media
+    image = models.ImageField(upload_to='listings/', blank=True, null=True)
+
+    # Amenities (comma-separated or JSON)
+    amenities = models.TextField(blank=True, default='')
+
+    # Availability
+    is_available = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.user.username}'s Profile - {self.rank}"
+        return f"{self.title} — ₱{self.monthly_rent}/mo ({self.property_type})"
 
 
-class RentRequest(models.Model):
+class BookingRequest(models.Model):
+    """A rental inquiry / booking request from a tenant to a landlord."""
     STATUS_CHOICES = (
         ('PENDING', 'Pending'),
         ('ACCEPTED', 'Accepted'),
@@ -150,22 +177,16 @@ class RentRequest(models.Model):
         ('CANCELLED', 'Cancelled'),
     )
 
-    client = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_requests')
-    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='received_requests')
-    hours = models.PositiveIntegerField(default=1)
+    tenant = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_bookings')
+    listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name='booking_requests')
+    message = models.TextField(blank=True, default='')
+    occupants = models.PositiveIntegerField(default=1)
+    move_in_date = models.DateField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
     created_at = models.DateTimeField(auto_now_add=True)
-    scheduled_time = models.DateTimeField(blank=True, null=True)
-    total_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-
-    def save(self, *args, **kwargs):
-        # Calculate total cost based on hours and profile's hourly rate
-        if self.profile and self.hours:
-            self.total_cost = self.profile.hourly_rate * self.hours
-        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Request from {self.client.username} to {self.profile.user.username} - {self.status}"
+        return f"Booking from {self.tenant.username} for {self.listing.title} — {self.status}"
 
 
 class ChatRoom(models.Model):
@@ -175,7 +196,7 @@ class ChatRoom(models.Model):
     is_active = models.BooleanField(default=True)
 
     def __str__(self):
-        return f"Anon Room: {self.user1.username} & {self.user2.username}"
+        return f"Chat Room: {self.user1.username} & {self.user2.username}"
 
 
 class Message(models.Model):
@@ -191,13 +212,14 @@ class Message(models.Model):
         return f"[{self.timestamp}] {self.sender.username}: {self.content[:20]}"
 
 
-# ──── Phase 5: Direct Messaging ────
+# ──── Direct Messaging ────
 
 
 class Conversation(models.Model):
-    """DM conversation between two users."""
+    """DM conversation between two users (landlord ↔ tenant)."""
     user1 = models.ForeignKey(User, on_delete=models.CASCADE, related_name='dm_conversations_as_user1')
     user2 = models.ForeignKey(User, on_delete=models.CASCADE, related_name='dm_conversations_as_user2')
+    listing = models.ForeignKey('Listing', on_delete=models.SET_NULL, null=True, blank=True, related_name='conversations')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -209,10 +231,10 @@ class Conversation(models.Model):
         return f"DM: {self.user1.username} & {self.user2.username}"
 
     @classmethod
-    def get_or_create_conversation(cls, user_a, user_b):
+    def get_or_create_conversation(cls, user_a, user_b, listing=None):
         """Always store with lower user_id as user1 for consistency."""
         u1, u2 = (user_a, user_b) if user_a.id < user_b.id else (user_b, user_a)
-        conv, created = cls.objects.get_or_create(user1=u1, user2=u2)
+        conv, created = cls.objects.get_or_create(user1=u1, user2=u2, listing=listing)
         return conv
 
 
@@ -253,23 +275,23 @@ class MessageReaction(models.Model):
         return f"{self.user.username} reacted {self.reaction_type} on msg {self.message.id}"
 
 
-# ──── Phase 6: Ratings & Reviews ────
+# ──── Ratings & Reviews ────
 
 
 class Review(models.Model):
-    """Review left by a client for a profile after a rental."""
+    """Review left by a tenant for a listing."""
     reviewer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reviews_given')
-    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='reviews')
+    listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name='reviews')
     rating = models.PositiveIntegerField(default=5)  # 1-5 stars
     comment = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ('reviewer', 'profile')
+        unique_together = ('reviewer', 'listing')
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.reviewer.username} rated {self.profile.user.username} {self.rating} stars"
+        return f"{self.reviewer.username} rated {self.listing.title} {self.rating} stars"
 
     def save(self, *args, **kwargs):
         if self.rating < 1:
@@ -277,4 +299,3 @@ class Review(models.Model):
         elif self.rating > 5:
             self.rating = 5
         super().save(*args, **kwargs)
-

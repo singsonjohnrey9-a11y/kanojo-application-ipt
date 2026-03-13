@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import (
-    User, Profile, RentRequest, ChatRoom, Message,
+    User, Listing, BookingRequest, ChatRoom, Message,
     LegalAgreement, PHILIPPINE_SAFETY_ACTS,
     Conversation, DirectMessage, MessageReaction, Review,
 )
@@ -13,8 +13,9 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
-            'password', 'is_rentable', 'date_of_birth',
+            'password', 'is_landlord', 'date_of_birth',
             'verification_status', 'legal_agreements_accepted',
+            'phone_number',
         ]
         read_only_fields = ['verification_status', 'legal_agreements_accepted']
 
@@ -33,14 +34,15 @@ class UserMiniSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'first_name', 'last_name']
 
 
-class ProfileSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
+class ListingSerializer(serializers.ModelSerializer):
+    user = UserMiniSerializer(read_only=True)
     average_rating = serializers.SerializerMethodField()
     review_count = serializers.SerializerMethodField()
 
     class Meta:
-        model = Profile
+        model = Listing
         fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']
 
     def get_average_rating(self, obj):
         reviews = obj.reviews.all()
@@ -52,10 +54,26 @@ class ProfileSerializer(serializers.ModelSerializer):
         return obj.reviews.count()
 
 
-class RentRequestSerializer(serializers.ModelSerializer):
+class BookingRequestSerializer(serializers.ModelSerializer):
+    tenant_info = UserMiniSerializer(source='tenant', read_only=True)
+    listing_info = serializers.SerializerMethodField()
+
     class Meta:
-        model = RentRequest
+        model = BookingRequest
         fields = '__all__'
+        read_only_fields = ['created_at']
+
+    def get_listing_info(self, obj):
+        return {
+            'id': obj.listing.id,
+            'title': obj.listing.title,
+            'image': obj.listing.image.url if obj.listing.image else None,
+            'monthly_rent': obj.listing.monthly_rent,
+            'property_type': obj.listing.property_type,
+            'location': obj.listing.location,
+            'landlord_id': obj.listing.user.id,
+            'landlord_name': f"{obj.listing.user.first_name} {obj.listing.user.last_name}"
+        }
 
 
 class ChatRoomSerializer(serializers.ModelSerializer):
@@ -90,6 +108,7 @@ class RegistrationSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=150)
     last_name = serializers.CharField(max_length=150)
     date_of_birth = serializers.DateField()
+    is_landlord = serializers.BooleanField(default=False)
     accepted_acts = serializers.ListField(
         child=serializers.CharField(), min_length=6
     )
@@ -100,9 +119,9 @@ class RegistrationSerializer(serializers.Serializer):
         age = today.year - value.year - (
             (today.month, today.day) < (value.month, value.day)
         )
-        if age < 20:
+        if age < 18:
             raise serializers.ValidationError(
-                'You must be at least 20 years old to register.'
+                'You must be at least 18 years old to register.'
             )
         return value
 
@@ -139,7 +158,7 @@ class VerificationReviewSerializer(serializers.Serializer):
     note = serializers.CharField(required=False, default='')
 
 
-# ──── Phase 5: DM Serializers ────
+# ──── DM Serializers ────
 
 
 class MessageReactionSerializer(serializers.ModelSerializer):
@@ -169,13 +188,25 @@ class ConversationSerializer(serializers.ModelSerializer):
     user2 = UserMiniSerializer(read_only=True)
     last_message = serializers.SerializerMethodField()
     unread_count = serializers.SerializerMethodField()
+    listing_info = serializers.SerializerMethodField()
 
     class Meta:
         model = Conversation
         fields = [
-            'id', 'user1', 'user2', 'created_at', 'updated_at',
+            'id', 'user1', 'user2', 'listing_info', 'created_at', 'updated_at',
             'last_message', 'unread_count',
         ]
+
+    def get_listing_info(self, obj):
+        if obj.listing:
+            return {
+                'id': obj.listing.id,
+                'title': obj.listing.title,
+                'image': obj.listing.image.url if obj.listing.image else None,
+                'price': str(obj.listing.monthly_rent),
+                'property_type': obj.listing.property_type
+            }
+        return None
 
     def get_last_message(self, obj):
         msg = obj.messages.order_by('-timestamp').first()
@@ -195,7 +226,7 @@ class ConversationSerializer(serializers.ModelSerializer):
         return 0
 
 
-# ──── Phase 6: Review Serializers ────
+# ──── Review Serializers ────
 
 
 class ReviewSerializer(serializers.ModelSerializer):
@@ -203,7 +234,7 @@ class ReviewSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Review
-        fields = ['id', 'reviewer', 'profile', 'rating', 'comment', 'created_at']
+        fields = ['id', 'reviewer', 'listing', 'rating', 'comment', 'created_at']
         read_only_fields = ['created_at']
 
     def validate_rating(self, value):
